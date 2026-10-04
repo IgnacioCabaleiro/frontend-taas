@@ -1,0 +1,119 @@
+/* Ajustes de la app sobre el design system (src/design/, copiado tal cual): solo lo que el bundle no cubre. */
+html, body, #root { height: 100%; }
+.tx-canvas { overflow: clip; } /* hidden rompe el sticky de la navegación */
+
+/* <dialog> nativo: trae foco atrapado y Esc; el aspecto lo pone .tx-modal adentro. */
+.tx-dialog { border: 0; padding: 0; background: none; overflow: visible; color: var(--ink); width: min(560px, calc(100% - 48px)); }
+.tx-dialog::backdrop { background: var(--scrim); }
+.tx-dialog .tx-modal { max-height: calc(100vh - 48px); overflow-y: auto; }
+
+/* Checkbox nativo oculto dentro de .tx-check: el foco se muestra en la caja. */
+.tx-check input { position: absolute; opacity: 0; }
+.tx-check:focus-within .box { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+select.tx-input { cursor: pointer; }
+.tx-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.tx-clickable { cursor: pointer; }
+
+/* ---------- Panel: gráficos ----------
+   Serie 1 y 2 de la paleta categórica validada (skill dataviz), con su paso propio para tema oscuro.
+   Los colores de estado del sistema quedan reservados para estados. */
+:root { --viz-1: #2a78d6; --viz-2: #eb6834; }
+[data-theme="dark"] { --viz-1: #3987e5; --viz-2: #d95926; }
+
+.viz-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.viz-card { padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.viz-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--ink-muted); font-weight: 500; }
+.viz-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+
+/* Columnas (incidentes por día) */
+.viz-cols { display: flex; align-items: flex-end; gap: 2px; height: 170px; border-bottom: 1px solid var(--hairline-strong); }
+.viz-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; position: relative; border-radius: 4px 4px 0 0; }
+.viz-col:hover, .viz-col:focus-visible { background: var(--surface-hover); }
+.viz-bar { background: var(--viz-1); border-radius: 4px 4px 0 0; }
+.viz-tip {
+  display: none; position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 3; pointer-events: none;
+  padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 550; white-space: nowrap;
+  background: var(--ink); color: var(--ink-inverse);
+}
+.viz-col:hover .viz-tip, .viz-col:focus-visible .viz-tip { display: block; }
+.viz-xrow { display: flex; gap: 2px; font-size: 11px; color: var(--ink-subtle); font-weight: 500; }
+.viz-xrow span { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: visible; }
+
+/* Barras horizontales (por servicio, SLA por prioridad) */
+.viz-rows { display: grid; grid-template-columns: minmax(90px, max-content) minmax(0, 1fr) max-content; gap: 10px 12px; align-items: center; font-size: 13px; }
+.viz-rows .lbl { color: var(--ink-muted); font-weight: 500; }
+.viz-rows .val { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.viz-rows .val small { font-weight: 500; color: var(--ink-subtle); font-size: 12px; }
+.viz-track { display: flex; gap: 2px; height: 14px; }
+.viz-track.meter { background: var(--surface-sunken); border-radius: 4px; }
+.viz-seg { height: 100%; min-width: 3px; }
+.viz-seg:last-child { border-radius: 0 4px 4px 0; }
+.viz-seg:hover { filter: brightness(1.12); }
+
+.viz-stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.viz-stage { padding: 12px; border-radius: var(--radius-md); background: var(--surface-sunken); border: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.viz-stage b { font-size: 24px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Configuración ---------- */
+.cfg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.cfg-line { display: flex; gap: 8px; align-items: center; }
+.cfg-line .tx-input { flex: 1; min-width: 0; }
+.cfg-field { display: grid; grid-template-columns: minmax(0, 1.4fr) 120px minmax(0, 1.6fr) auto auto; gap: 8px; align-items: center; }
+.cfg-num { width: 84px !important; text-align: center; }
+.cfg-save { position: sticky; bottom: 16px; z-index: 4; display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+.cfg-user { padding: 10px 0; border-top: 1px solid var(--hairline); }
+.cfg-user:first-child { border-top: 0; padding-top: 0; }
+.cfg-newuser { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; align-items: center; }
+
+/* ---------- Ingreso y onboarding ---------- */
+.auth { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.auth .tx-modal { width: min(420px, 100%); }
+.onb { max-width: 1180px; margin: 0 auto; padding: 28px 24px 56px; display: flex; flex-direction: column; gap: 24px; }
+.onb-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.onb-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.onb-steps li { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 4px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 500; color: var(--ink-subtle); }
+.onb-steps li span { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; background: var(--surface-solid); border: 1.5px dashed var(--hairline-strong); }
+.onb-steps li.done { color: var(--ink-muted); }
+.onb-steps li.done span { border: 0; background: var(--ink); color: var(--ink-inverse); }
+.onb-steps li.current { background: var(--surface-solid); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-solid); }
+.onb-steps li.current span { border: 0; background: var(--brand); color: var(--on-brand); }
+
+.onb-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.onb-step { padding: 28px; gap: 22px; }
+.onb-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
+.onb-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.onb-picks.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.onb-pick {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start; text-align: left; padding: 16px 18px; cursor: pointer;
+  border: 1.5px solid var(--hairline-strong); color: var(--ink);
+  transition: border-color var(--tx-fast) var(--tx-ease), box-shadow var(--tx-fast) var(--tx-ease);
+}
+.onb-pick:hover { border-color: var(--control-border); }
+.onb-pick[aria-pressed="true"] { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint), var(--shadow-solid); }
+.onb-q { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.onb-q legend { padding: 0; margin-bottom: 10px; }
+.onb-then { display: flex; gap: 6px; align-items: center; color: var(--ink-muted); }
+.onb-then .tx-ic { color: var(--brand-ink); }
+
+.onb-preview { position: sticky; top: 20px; padding: 20px; display: flex; flex-direction: column; gap: 18px; border-radius: var(--radius-xl); }
+.onb-pv-block { display: flex; flex-direction: column; gap: 8px; }
+.onb-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.onb-form { padding: 14px; display: flex; flex-direction: column; gap: 12px; border-radius: var(--radius-md); }
+.onb-form > div { display: flex; flex-direction: column; gap: 6px; }
+.onb-new { animation: onb-in var(--tx-base) var(--tx-ease); }
+@keyframes onb-in { from { opacity: 0; transform: translateY(4px); } }
+
+@media (max-width: 1100px) {
+  .viz-grid, .cfg-grid { grid-template-columns: 1fr; }
+  .viz-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .onb-layout { grid-template-columns: 1fr; }
+  .onb-preview { position: static; }
+}
+@media (max-width: 640px) {
+  .cfg-field { grid-template-columns: 1fr 1fr; }
+  .onb-picks, .onb-picks.two { grid-template-columns: 1fr; }
+  .onb-step { padding: 20px; }
+}
