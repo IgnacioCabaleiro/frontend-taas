@@ -1,5 +1,5 @@
-// ponytail: URL fija, es una demo local. Pasar a variable de entorno al desplegar.
-const API = 'http://localhost:8080/api'
+// La URL de la API se fija al compilar (VITE_API_URL); sin definir, apunta al backend local.
+const API: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api'
 
 export type Status = 'identificado' | 'en_analisis' | 'error_conocido' | 'resuelto'
 export type Priority = 'alta' | 'media' | 'baja'
