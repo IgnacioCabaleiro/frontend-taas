@@ -18,6 +18,7 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
   type Filter = 'abiertos' | 'mios' | 'sin' | 'vencidos' | 'todos'
   const [filter, setFilter] = useState<Filter>('abiertos')
   const [detail, setDetail] = useState(0)
+  const [busy, setBusy] = useState(false)
 
   const active = problems.filter((p) => p.status !== 'resuelto')
   // Si el servicio ya tiene un problema activo, se ofrece su workaround al cargar el incidente.
@@ -64,7 +65,11 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
             setErrs(bad)
             if (Object.values(bad).some(Boolean)) return
             const body = { title, description, service, priority: prio, fields: custom, assigneeId: Number(assigneeId ?? 0), problemId: notice && linkIt ? match.id : 0 }
-            if (await run(api.createIncident(body))) {
+            // Mientras se guarda, el botón queda deshabilitado: un doble clic no duplica el ticket.
+            setBusy(true)
+            const ok = await run(api.createIncident(body))
+            setBusy(false)
+            if (ok) {
               form.reset()
               setService('')
               setPrio('media')
@@ -120,7 +125,7 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
             {sla && <span className="tx-help">SLA: {config.slaHours[prio]} h para resolver</span>}
           </div>
 
-          <button className="tx-btn primary" style={{ height: 38 }}>
+          <button className="tx-btn primary" style={{ height: 38 }} disabled={busy}>
             <Ic n="plus" />
             Crear
           </button>
@@ -286,7 +291,9 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
 function IncidentDialog({ id, state, run, goProblem, onClose }: { id: number; state: State; run: Run; goProblem: (id: number) => void; onClose: () => void }) {
   const { config, users, problems } = state
   const canResolve = can(state, 'resolver')
-  const i = state.incidents.find((x) => x.id === id)!
+  const i = state.incidents.find((x) => x.id === id)
+  // Puede dejar de estar visible mientras el detalle está abierto (por ejemplo, si cambió el rol).
+  if (!i) return null
   const p = problems.find((x) => x.id === i.problemId)
   const closed = config.states[config.states.length - 1]
   const patch = (b: Parameters<typeof api.updateIncident>[1]) => run(api.updateIncident(i.id, b))
@@ -378,6 +385,11 @@ function IncidentDialog({ id, state, run, goProblem, onClose }: { id: number; st
             </A>
             <span className="tx-strong">{p.title}</span>
             <StatusBadge s={p.status} />
+            {p.status !== 'resuelto' && (
+              <button type="button" className="tx-btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => patch({ problemId: 0 })}>
+                Desvincular
+              </button>
+            )}
           </div>
         ) : (
           <select id="id-pr" className="tx-input" value="" onChange={(e) => patch({ problemId: Number(e.target.value) })}>
