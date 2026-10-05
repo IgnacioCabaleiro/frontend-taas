@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Problem, type State } from './api'
-import { A, Dialog, FieldError, Filters, Ic, IncBadge, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, count, fields, fmt, userName, type Run } from './ui'
+import { A, Dialog, FieldError, Filters, Ic, IncBadge, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, can, count, fields, fmt, userName, type Run } from './ui'
 
 export function Board({ state, run, open }: { state: State; run: Run; open: (id: number) => void }) {
   const { incidents, problems, suggestions } = state
   const [filter, setFilter] = useState<'todos' | 'activos' | 'resueltos'>('todos')
+  const [creating, setCreating] = useState('')
 
   const active = problems.filter((p) => p.status !== 'resuelto')
   const solved = problems.filter((p) => p.status === 'resuelto')
@@ -55,7 +56,11 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
               <div key={sg.service} className="tx-reco-row">
                 <div>
                   <div className="svc">{sg.service}</div>
-                  <div className="tx-caption">Último {ago(incidents[Math.max(...sg.incidentIds) - 1].createdAt)}</div>
+                  {(() => {
+                    // Buscar por id: el usuario puede no ver todos los incidentes de la cuenta.
+                    const last = incidents.find((i) => i.id === Math.max(...sg.incidentIds))
+                    return last && <div className="tx-caption">Último {ago(last.createdAt)}</div>
+                  })()}
                 </div>
                 <div className="n">{count(sg.incidentIds.length, 'incidente')}</div>
                 <div className="ids">
@@ -67,10 +72,14 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
                 </div>
                 <button
                   className="tx-btn primary"
+                  disabled={creating !== ''}
                   onClick={async () => {
+                    // Un doble clic crearía dos problemas con los mismos incidentes.
+                    setCreating(sg.service)
                     const s = await run(
                       api.createProblem({ title: `Incidentes recurrentes en ${sg.service}`, service: sg.service, incidentIds: sg.incidentIds }),
                     )
+                    setCreating('')
                     if (s) open(s.problems[s.problems.length - 1].id)
                   }}
                 >
@@ -158,6 +167,7 @@ const PANEL_TITLE = ['Problema identificado', 'Análisis de causa raíz', 'Error
 
 export function ProblemDetail({ p, state, run, back }: { p: Problem; state: State; run: Run; back: () => void }) {
   const { users, config } = state
+  const canResolve = can(state, 'resolver')
   const incidents = state.incidents.filter((i) => i.problemId === p.id)
   const closed = config.states[config.states.length - 1]
   const step = STEPS.indexOf(p.status)
@@ -216,6 +226,7 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
             value={p.ownerId}
             onChange={(e) => run(api.setOwner(p.id, Number(e.target.value)))}
           >
+            {!users.some((u) => u.id === p.ownerId) && <option value={p.ownerId}>Responsable: sin asignar</option>}
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 Responsable: {u.name}
@@ -382,7 +393,7 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
                       <Prio p={i.priority} />
                       {i.resolvedAt ? (
                         <IncBadge i={i} />
-                      ) : p.workaround ? (
+                      ) : p.workaround && canResolve ? (
                         <button className="tx-btn secondary sm" onClick={() => run(api.updateIncident(i.id, { status: closed }))}>
                           <Ic n="bulb" />
                           Resolver con workaround
@@ -443,8 +454,10 @@ export function NewProblemModal(props: { services: string[]; run: Run; onClose: 
         setErrs(bad)
         if (bad.title || bad.service) return
         const s = await props.run(api.createProblem(f))
+        // Si falla, el modal queda abierto para no perder lo escrito (el error se ve en el aviso).
+        if (!s) return
         props.onClose()
-        if (s) props.onCreated(s.problems[s.problems.length - 1].id)
+        props.onCreated(s.problems[s.problems.length - 1].id)
       }}
       footer={
         <>

@@ -15,8 +15,11 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem: (
   const seeProblems = withProblems && can(state, 'problemas')
   const [period, setPeriod] = useState<'7' | '14' | '30'>('30')
   const days = Number(period)
-  const start = new Date(new Date().setHours(0, 0, 0, 0) - (days - 1) * DAY)
-  const inc = state.incidents.filter((i) => new Date(i.createdAt) >= start)
+  // Desde las 00:00 de hace (n - 1) días: el mismo corte para los contadores del filtro y para los indicadores.
+  const since = (n: number) => new Date(new Date().setHours(0, 0, 0, 0) - (n - 1) * DAY)
+  const inPeriod = (n: number) => state.incidents.filter((i) => new Date(i.createdAt) >= since(n))
+  const start = since(days)
+  const inc = inPeriod(days)
 
   const resolved = inc.filter((i) => i.resolvedAt)
   const measurable = judged(inc)
@@ -79,9 +82,9 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem: (
         value={period}
         onChange={setPeriod}
         options={[
-          ['7', 'Últimos 7 días', state.incidents.filter((i) => +new Date(i.createdAt) > Date.now() - 7 * DAY).length],
-          ['14', '14 días', state.incidents.filter((i) => +new Date(i.createdAt) > Date.now() - 14 * DAY).length],
-          ['30', '30 días', state.incidents.filter((i) => +new Date(i.createdAt) > Date.now() - 30 * DAY).length],
+          ['7', 'Últimos 7 días', inPeriod(7).length],
+          ['14', '14 días', inPeriod(14).length],
+          ['30', '30 días', inPeriod(30).length],
         ]}
       />
 
