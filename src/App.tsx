@@ -65,6 +65,7 @@ export default function App() {
     setState(null)
     setError(null)
     setOpenId(0)
+    setModal(false)
   }
   const run: Run = async (p) => {
     try {
@@ -94,6 +95,7 @@ export default function App() {
     setTab(t)
     setOpenId(problemId)
   }
+  const goProblem = tabs.includes('problemas') ? (id: number) => go('problemas', id) : undefined
   const me = state?.users.find((u) => u.id === state.me)
   const open = current === 'problemas' ? state?.problems.find((p) => p.id === openId) : undefined
   const counts: Partial<Record<Tab, number>> = state
@@ -164,7 +166,15 @@ export default function App() {
               </div>
               <div className="tx-row">
                 {current === 'problemas' && (
-                  <button className="tx-btn ghost" disabled={!state} onClick={() => setModal(true)}>
+                  <button
+                    className="tx-btn ghost"
+                    disabled={!state}
+                    onClick={() => {
+                      // El modal muestra los errores de su propio envío, no un aviso anterior.
+                      setError(null)
+                      setModal(true)
+                    }}
+                  >
                     <Ic n="edit" />
                     Registrar un problema manualmente
                   </button>
@@ -218,11 +228,11 @@ export default function App() {
           )}
           {state && state.onboarded && tabs.includes(current) && (
             <>
-              {current === 'panel' && <Dashboard state={state} openProblem={(id) => go('problemas', id)} />}
+              {current === 'panel' && <Dashboard state={state} openProblem={goProblem} />}
               {current === 'problemas' && open && <ProblemDetail p={open} state={state} run={run} back={() => setOpenId(0)} />}
               {current === 'problemas' && !open && <Board state={state} run={run} open={setOpenId} />}
-              {current === 'incidentes' && <Incidents state={state} run={run} goProblem={(id) => go('problemas', id)} />}
-              {current === 'kedb' && <KnownErrors state={state} goProblem={(id) => go('problemas', id)} goIncidents={() => go('incidentes')} />}
+              {current === 'incidentes' && <Incidents state={state} run={run} goProblem={goProblem} />}
+              {current === 'kedb' && <KnownErrors state={state} goProblem={goProblem} goIncidents={() => go('incidentes')} />}
               {current === 'config' && <Settings key={state.id} state={state} run={run} />}
             </>
           )}
@@ -230,7 +240,13 @@ export default function App() {
       </div>
 
       {modal && state && (
-        <NewProblemModal services={state.config.services} run={run} onClose={() => setModal(false)} onCreated={(id) => go('problemas', id)} />
+        <NewProblemModal
+          services={state.config.services}
+          run={run}
+          error={error?.message}
+          onClose={() => setModal(false)}
+          onCreated={(id) => go('problemas', id)}
+        />
       )}
     </div>
   )

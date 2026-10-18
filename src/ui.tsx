@@ -61,6 +61,15 @@ export const STATUS: Record<Status, { label: string; cls: string }> = {
 export const StatusBadge = ({ s }: { s: Status }) => <span className={`tx-badge ${STATUS[s].cls}`}>{STATUS[s].label}</span>
 export const Prio = ({ p }: { p: Priority }) => <span className={`tx-prio ${p}`}>{p[0].toUpperCase() + p.slice(1)}</span>
 
+export const ProblemId = ({ id, go }: { id: number; go?: (id: number) => void }) =>
+  go ? (
+    <A className="tx-id" onClick={() => go(id)}>
+      P-{id}
+    </A>
+  ) : (
+    <span className="tx-strong">P-{id}</span>
+  )
+
 export function Filters<T extends string>(props: { value: T; onChange: (v: T) => void; options: [T, string, number][] }) {
   return (
     <div className="tx-filters">

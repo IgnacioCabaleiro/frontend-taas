@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Problem, type State } from './api'
-import { A, Dialog, FieldError, Filters, Ic, IncBadge, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, count, fields, fmt, userName, type Run } from './ui'
+import { A, Dialog, FieldError, Filters, Ic, IncBadge, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, can, count, fields, fmt, userName, type Run } from './ui'
 
 export function Board({ state, run, open }: { state: State; run: Run; open: (id: number) => void }) {
   const { incidents, problems, suggestions } = state
   const [filter, setFilter] = useState<'todos' | 'activos' | 'resueltos'>('todos')
+  const [creating, setCreating] = useState('')
 
   const active = problems.filter((p) => p.status !== 'resuelto')
   const solved = problems.filter((p) => p.status === 'resuelto')
@@ -55,7 +56,11 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
               <div key={sg.service} className="tx-reco-row">
                 <div>
                   <div className="svc">{sg.service}</div>
-                  <div className="tx-caption">Último {ago(incidents[Math.max(...sg.incidentIds) - 1].createdAt)}</div>
+                  {(() => {
+                    // Buscar por id: el usuario puede no ver todos los incidentes de la cuenta.
+                    const last = incidents.find((i) => i.id === Math.max(...sg.incidentIds))
+                    return last && <div className="tx-caption">Último {ago(last.createdAt)}</div>
+                  })()}
                 </div>
                 <div className="n">{count(sg.incidentIds.length, 'incidente')}</div>
                 <div className="ids">
@@ -67,10 +72,14 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
                 </div>
                 <button
                   className="tx-btn primary"
+                  disabled={creating !== ''}
                   onClick={async () => {
+                    // Un doble clic crearía dos problemas con los mismos incidentes.
+                    setCreating(sg.service)
                     const s = await run(
                       api.createProblem({ title: `Incidentes recurrentes en ${sg.service}`, service: sg.service, incidentIds: sg.incidentIds }),
                     )
+                    setCreating('')
                     if (s) open(s.problems[s.problems.length - 1].id)
                   }}
                 >
@@ -158,6 +167,7 @@ const PANEL_TITLE = ['Problema identificado', 'Análisis de causa raíz', 'Error
 
 export function ProblemDetail({ p, state, run, back }: { p: Problem; state: State; run: Run; back: () => void }) {
   const { users, config } = state
+  const canResolve = can(state, 'resolver')
   const incidents = state.incidents.filter((i) => i.problemId === p.id)
   const closed = config.states[config.states.length - 1]
   const step = STEPS.indexOf(p.status)
@@ -382,7 +392,7 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
                       <Prio p={i.priority} />
                       {i.resolvedAt ? (
                         <IncBadge i={i} />
-                      ) : p.workaround ? (
+                      ) : p.workaround && canResolve ? (
                         <button className="tx-btn secondary sm" onClick={() => run(api.updateIncident(i.id, { status: closed }))}>
                           <Ic n="bulb" />
                           Resolver con workaround
@@ -430,8 +440,9 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
   )
 }
 
-export function NewProblemModal(props: { services: string[]; run: Run; onClose: () => void; onCreated: (id: number) => void }) {
+export function NewProblemModal(props: { services: string[]; run: Run; error?: string; onClose: () => void; onCreated: (id: number) => void }) {
   const [errs, setErrs] = useState({ title: false, service: false })
+  const [busy, setBusy] = useState(false)
   return (
     <Dialog
       title="Registrar un problema"
@@ -442,16 +453,22 @@ export function NewProblemModal(props: { services: string[]; run: Run; onClose: 
         const bad = { title: !f.title.trim(), service: !f.service }
         setErrs(bad)
         if (bad.title || bad.service) return
+        setBusy(true)
         const s = await props.run(api.createProblem(f))
+        setBusy(false)
+        // Si falla, el modal queda abierto para no perder lo escrito.
+        if (!s) return
         props.onClose()
-        if (s) props.onCreated(s.problems[s.problems.length - 1].id)
+        props.onCreated(s.problems[s.problems.length - 1].id)
       }}
       footer={
         <>
           <button type="button" className="tx-btn ghost" onClick={props.onClose}>
             Cancelar
           </button>
-          <button className="tx-btn primary">Registrar problema</button>
+          <button className="tx-btn primary" disabled={busy}>
+            Registrar problema
+          </button>
         </>
       }
     >
@@ -480,6 +497,13 @@ export function NewProblemModal(props: { services: string[]; run: Run; onClose: 
         </label>
         <textarea id="np-d" name="description" className="tx-textarea" style={{ minHeight: 72 }} />
       </div>
+      {/* El aviso de la página queda tapado por el modal: el error se muestra acá. */}
+      {props.error && (
+        <div className="tx-banner" role="alert">
+          <Ic n="warn" />
+          <span className="grow">{props.error}</span>
+        </div>
+      )}
     </Dialog>
   )
 }
