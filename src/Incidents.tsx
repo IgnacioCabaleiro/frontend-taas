@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, type Priority, type State } from './api'
-import { A, Dialog, FieldError, Filters, Ic, IncBadge, Prio, Sla, StatusBadge, Workaround, can, fields, fmt, isLate, userName, type Run } from './ui'
+import { A, Dialog, FieldError, Filters, Ic, IncBadge, Prio, ProblemId, Sla, StatusBadge, Workaround, can, fields, fmt, isLate, userName, type Run } from './ui'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
 
-export function Incidents({ state, run, goProblem }: { state: State; run: Run; goProblem: (id: number) => void }) {
+export function Incidents({ state, run, goProblem }: { state: State; run: Run; goProblem?: (id: number) => void }) {
   const { incidents, problems, config, users } = state
   const { sla, problems: withProblems } = config.modules
   const canCreate = can(state, 'crear')
@@ -19,6 +19,11 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
   const [filter, setFilter] = useState<Filter>('abiertos')
   const [detail, setDetail] = useState(0)
   const [busy, setBusy] = useState(false)
+  // Si el incidente deja de estar visible, se cierra el detalle: si no, se reabriría solo al reaparecer.
+  const detailGone = detail > 0 && !incidents.some((i) => i.id === detail)
+  useEffect(() => {
+    if (detailGone) setDetail(0)
+  }, [detailGone])
 
   const active = problems.filter((p) => p.status !== 'resuelto')
   // Si el servicio ya tiene un problema activo, se ofrece su workaround al cargar el incidente.
@@ -182,9 +187,7 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
             <div>
               <div className="tx-row" style={{ gap: 8 }}>
                 <span className="tx-strong">{match.service} ya tiene un problema activo:</span>
-                <A className="tx-id" onClick={() => goProblem(match.id)}>
-                  P-{match.id}
-                </A>
+                <ProblemId id={match.id} go={goProblem} />
                 <span className="tx-strong">{match.title}</span>
                 <StatusBadge s={match.status} />
               </div>
@@ -259,13 +262,7 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
                     {showProblem && (
                       <td data-label="Problema">
                         {i.problemId ? (
-                          can(state, 'problemas') ? (
-                            <A className="tx-id" onClick={() => goProblem(i.problemId)}>
-                              P-{i.problemId}
-                            </A>
-                          ) : (
-                            <span className="tx-strong">P-{i.problemId}</span>
-                          )
+                          <ProblemId id={i.problemId} go={goProblem} />
                         ) : (
                           <span className="tx-subtle">—</span>
                         )}
@@ -288,11 +285,10 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
 }
 
 // Detalle de un incidente: datos propios de la empresa, SLA y las tres decisiones (estado, persona, problema).
-function IncidentDialog({ id, state, run, goProblem, onClose }: { id: number; state: State; run: Run; goProblem: (id: number) => void; onClose: () => void }) {
+function IncidentDialog({ id, state, run, goProblem, onClose }: { id: number; state: State; run: Run; goProblem?: (id: number) => void; onClose: () => void }) {
   const { config, users, problems } = state
   const canResolve = can(state, 'resolver')
   const i = state.incidents.find((x) => x.id === id)
-  // Puede dejar de estar visible mientras el detalle está abierto (por ejemplo, si cambió el rol).
   if (!i) return null
   const p = problems.find((x) => x.id === i.problemId)
   const closed = config.states[config.states.length - 1]
@@ -374,15 +370,16 @@ function IncidentDialog({ id, state, run, goProblem, onClose }: { id: number; st
         </label>
         {p ? (
           <div className="tx-row" style={{ gap: 8 }}>
-            <A
-              className="tx-id"
-              onClick={() => {
-                onClose()
-                if (can(state, 'problemas')) goProblem(p.id)
-              }}
-            >
-              P-{p.id}
-            </A>
+            <ProblemId
+              id={p.id}
+              go={
+                goProblem &&
+                ((id) => {
+                  onClose()
+                  goProblem(id)
+                })
+              }
+            />
             <span className="tx-strong">{p.title}</span>
             <StatusBadge s={p.status} />
             {p.status !== 'resuelto' && (

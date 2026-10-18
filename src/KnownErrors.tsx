@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import type { State } from './api'
-import { A, Filters, Ic, RootCause, Solution, StatusBadge, Workaround, can, count, fmt } from './ui'
+import { A, Filters, Ic, ProblemId, RootCause, Solution, StatusBadge, Workaround, can, count, fmt } from './ui'
 
-export function KnownErrors({ state, goProblem, goIncidents }: { state: State; goProblem: (id: number) => void; goIncidents: () => void }) {
+export function KnownErrors({ state, goProblem, goIncidents }: { state: State; goProblem?: (id: number) => void; goIncidents: () => void }) {
   const { problems, incidents } = state
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<'todos' | 'wa' | 'resueltos' | 'analisis'>('todos')
-  // Quien solo resuelve tickets ve esta sección pero no la de Problemas: sin link al detalle.
-  const canOpen = can(state, 'problemas')
 
   const lists = {
     todos: problems,
@@ -85,14 +83,7 @@ export function KnownErrors({ state, goProblem, goIncidents }: { state: State; g
                   <div>
                     <div className="ttl">{p.title}</div>
                     <div className="svc">
-                      {canOpen ? (
-                        <A className="tx-id" onClick={() => goProblem(p.id)}>
-                          P-{p.id}
-                        </A>
-                      ) : (
-                        <span className="tx-id">P-{p.id}</span>
-                      )}{' '}
-                      · {p.service}
+                      <ProblemId id={p.id} go={goProblem} /> · {p.service}
                     </div>
                   </div>
                   <StatusBadge s={p.status} />
@@ -111,10 +102,9 @@ export function KnownErrors({ state, goProblem, goIncidents }: { state: State; g
                 )}
                 <div className="ft">
                   <span>
-                    {count(incidents.filter((i) => i.problemId === p.id).length, 'incidente')}
-                    {last && ` · actualizado ${fmt(last.at)}`}
+                    {count(incidents.filter((i) => i.problemId === p.id).length, 'incidente')} · actualizado {fmt(last.at)}
                   </span>
-                  {canOpen && (
+                  {goProblem && (
                     <A style={{ display: 'inline-flex', gap: 4, alignItems: 'center', fontWeight: 550 }} onClick={() => goProblem(p.id)}>
                       Ver problema
                       <Ic n="chevron" />

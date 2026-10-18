@@ -1,25 +1,33 @@
 // Panel de visualización. Todo se calcula en el cliente a partir del estado de la empresa.
 import { useState } from 'react'
 import type { Incident, Priority, State } from './api'
-import { A, Filters, STATUS, STEPS, StatusBadge, can, count, isLate } from './ui'
+import { Filters, ProblemId, STATUS, STEPS, StatusBadge, count, isLate } from './ui'
 
-const DAY = 864e5
+// Las 00:00 de hace n días. setDate (y no restar 24 h) evita correrse una hora con el cambio de horario.
+const midnight = (n: number) => {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - n)
+  return d
+}
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
 const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : null)
 const show = (v: number | null, unit = '%') => (v === null ? '—' : `${v}${unit}`)
 // SLA medible: incidentes ya resueltos, más los abiertos que ya vencieron.
 const judged = (list: Incident[]) => list.filter((i) => i.resolvedAt || isLate(i))
 
-export function Dashboard({ state, openProblem }: { state: State; openProblem: (id: number) => void }) {
+export function Dashboard({ state, openProblem }: { state: State; openProblem?: (id: number) => void }) {
   const { sla, problems: withProblems } = state.config.modules
-  const seeProblems = withProblems && can(state, 'problemas')
   const [period, setPeriod] = useState<'7' | '14' | '30'>('30')
   const days = Number(period)
   // Desde las 00:00 de hace (n - 1) días: el mismo corte para los contadores del filtro y para los indicadores.
-  const since = (n: number) => new Date(new Date().setHours(0, 0, 0, 0) - (n - 1) * DAY)
-  const inPeriod = (n: number) => state.incidents.filter((i) => new Date(i.createdAt) >= since(n))
-  const start = since(days)
-  const inc = inPeriod(days)
+  const start = midnight(days - 1)
+  const inc = state.incidents.filter((i) => new Date(i.createdAt) >= start)
+  const inLast = (n: number) => {
+    if (n === days) return inc.length
+    const from = midnight(n - 1)
+    return state.incidents.filter((i) => new Date(i.createdAt) >= from).length
+  }
 
   const resolved = inc.filter((i) => i.resolvedAt)
   const measurable = judged(inc)
@@ -42,11 +50,12 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem: (
 
   // Incidentes por día.
   const perDay = Array.from({ length: days }, (_, d) => {
-    const from = +start + d * DAY
-    const date = new Date(from)
+    const date = midnight(days - 1 - d)
+    const from = +date
+    const to = +midnight(days - 2 - d)
     return {
       label: `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`,
-      n: inc.filter((i) => +new Date(i.createdAt) >= from && +new Date(i.createdAt) < from + DAY).length,
+      n: inc.filter((i) => +new Date(i.createdAt) >= from && +new Date(i.createdAt) < to).length,
     }
   })
   const maxDay = Math.max(1, ...perDay.map((d) => d.n))
@@ -82,9 +91,9 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem: (
         value={period}
         onChange={setPeriod}
         options={[
-          ['7', 'Últimos 7 días', inPeriod(7).length],
-          ['14', '14 días', inPeriod(14).length],
-          ['30', '30 días', inPeriod(30).length],
+          ['7', 'Últimos 7 días', inLast(7)],
+          ['14', '14 días', inLast(14)],
+          ['30', '30 días', inLast(30)],
         ]}
       />
 
@@ -243,13 +252,7 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem: (
                 {top.map(({ p, total, open }) => (
                   <tr key={p.id}>
                     <td className="w-id" data-label="ID">
-                      {seeProblems ? (
-                        <A className="tx-id" onClick={() => openProblem(p.id)}>
-                          P-{p.id}
-                        </A>
-                      ) : (
-                        <span className="tx-strong">P-{p.id}</span>
-                      )}
+                      <ProblemId id={p.id} go={openProblem} />
                     </td>
                     <td className="t-title">{p.title}</td>
                     <td className="tx-muted" data-label="Servicio">

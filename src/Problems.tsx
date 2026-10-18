@@ -226,7 +226,6 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
             value={p.ownerId}
             onChange={(e) => run(api.setOwner(p.id, Number(e.target.value)))}
           >
-            {!users.some((u) => u.id === p.ownerId) && <option value={p.ownerId}>Responsable: sin asignar</option>}
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 Responsable: {u.name}
@@ -441,8 +440,9 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
   )
 }
 
-export function NewProblemModal(props: { services: string[]; run: Run; onClose: () => void; onCreated: (id: number) => void }) {
+export function NewProblemModal(props: { services: string[]; run: Run; error?: string; onClose: () => void; onCreated: (id: number) => void }) {
   const [errs, setErrs] = useState({ title: false, service: false })
+  const [busy, setBusy] = useState(false)
   return (
     <Dialog
       title="Registrar un problema"
@@ -453,8 +453,10 @@ export function NewProblemModal(props: { services: string[]; run: Run; onClose: 
         const bad = { title: !f.title.trim(), service: !f.service }
         setErrs(bad)
         if (bad.title || bad.service) return
+        setBusy(true)
         const s = await props.run(api.createProblem(f))
-        // Si falla, el modal queda abierto para no perder lo escrito (el error se ve en el aviso).
+        setBusy(false)
+        // Si falla, el modal queda abierto para no perder lo escrito.
         if (!s) return
         props.onClose()
         props.onCreated(s.problems[s.problems.length - 1].id)
@@ -464,7 +466,9 @@ export function NewProblemModal(props: { services: string[]; run: Run; onClose: 
           <button type="button" className="tx-btn ghost" onClick={props.onClose}>
             Cancelar
           </button>
-          <button className="tx-btn primary">Registrar problema</button>
+          <button className="tx-btn primary" disabled={busy}>
+            Registrar problema
+          </button>
         </>
       }
     >
@@ -493,6 +497,13 @@ export function NewProblemModal(props: { services: string[]; run: Run; onClose: 
         </label>
         <textarea id="np-d" name="description" className="tx-textarea" style={{ minHeight: 72 }} />
       </div>
+      {/* El aviso de la página queda tapado por el modal: el error se muestra acá. */}
+      {props.error && (
+        <div className="tx-banner" role="alert">
+          <Ic n="warn" />
+          <span className="grow">{props.error}</span>
+        </div>
+      )}
     </Dialog>
   )
 }
