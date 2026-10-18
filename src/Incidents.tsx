@@ -1,51 +1,63 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api, type Priority, type State } from './api'
-import { A, Dialog, FieldError, Filters, Ic, IncBadge, Prio, ProblemId, Sla, StatusBadge, Workaround, can, fields, fmt, isLate, userName, type Run } from './ui'
+import { A, FieldError, Filters, Ic, IncStage, IncidentId, Prio, ProblemId, Sla, StatusBadge, can, count, fields, isLate, userName, type Run } from './ui'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
 
-export function Incidents({ state, run, goProblem }: { state: State; run: Run; goProblem?: (id: number) => void }) {
+export function Incidents(props: {
+  state: State
+  run: Run
+  goProblem?: (id: number) => void
+  open: (id: number) => void
+  related: number // incidente cerrado que continúa el que se va a registrar (0 = ninguno)
+  setRelated: (id: number) => void
+}) {
+  const { state, run, goProblem, open, related, setRelated } = props
   const { incidents, problems, config, users } = state
   const { sla, problems: withProblems } = config.modules
   const canCreate = can(state, 'crear')
   const canResolve = can(state, 'resolver')
   const showProblem = withProblems && (canResolve || can(state, 'problemas'))
-  const [service, setService] = useState('')
-  const [prio, setPrio] = useState<Priority>('media')
+  // Un incidente relacionado arranca con el servicio, la prioridad y los campos propios del cerrado que continúa.
+  const [prefill, setPrefill] = useState(() => incidents.find((i) => i.id === related))
+  const [formKey, setFormKey] = useState(0)
+  const [service, setService] = useState(prefill?.service ?? '')
+  const [prio, setPrio] = useState<Priority>(prefill?.priority ?? 'media')
   const [linkIt, setLinkIt] = useState(true)
   const [dismissed, setDismissed] = useState('')
   const [errs, setErrs] = useState<Record<string, boolean>>({})
-  type Filter = 'abiertos' | 'mios' | 'sin' | 'vencidos' | 'todos'
+  type Filter = 'abiertos' | 'mios' | 'vencidos' | 'pausa' | 'sin' | 'resueltos' | 'cerrados' | 'todos'
   const [filter, setFilter] = useState<Filter>('abiertos')
-  const [detail, setDetail] = useState(0)
   const [busy, setBusy] = useState(false)
-  // Si el incidente deja de estar visible, se cierra el detalle: si no, se reabriría solo al reaparecer.
-  const detailGone = detail > 0 && !incidents.some((i) => i.id === detail)
-  useEffect(() => {
-    if (detailGone) setDetail(0)
-  }, [detailGone])
 
   const active = problems.filter((p) => p.status !== 'resuelto')
   // Si el servicio ya tiene un problema activo, se ofrece su workaround al cargar el incidente.
   const match = active.find((p) => p.service === service)
   const notice = canResolve && match && dismissed !== service
 
+  // Filtros por etapa ITIL: abierto (sin resolvedAt), resuelto sin cerrar y cerrado.
   const openOnes = incidents.filter((i) => !i.resolvedAt)
   const lists = {
     abiertos: openOnes,
     mios: openOnes.filter((i) => i.assigneeId === state.me),
-    sin: incidents.filter((i) => !i.problemId),
     vencidos: openOnes.filter(isLate),
+    pausa: openOnes.filter((i) => config.pauseStates.includes(i.status)),
+    sin: incidents.filter((i) => !i.problemId),
+    resueltos: incidents.filter((i) => i.resolvedAt && !i.closedAt),
+    cerrados: incidents.filter((i) => i.closedAt),
     todos: incidents,
   }
 
-  // Los filtros dependen de lo que el usuario puede hacer y de los módulos de la cuenta.
+  // Los filtros dependen de lo que el usuario puede hacer y de cómo trabaja la cuenta.
   const options = (
     [
       ['abiertos', 'Abiertos', true],
       ['mios', 'Asignados a mí', canResolve],
       ['vencidos', 'Vencidos', sla],
+      ['pausa', 'En pausa', config.pauseStates.length > 0],
       ['sin', 'Sin problema', withProblems && canResolve],
+      ['resueltos', 'Resueltos', true],
+      ['cerrados', 'Cerrados', true],
       ['todos', 'Todos', true],
     ] as [Filter, string, boolean][]
   )
@@ -56,7 +68,19 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
     <>
       {canCreate && (
       <section className="tx-stack" style={{ gap: 12 }}>
+        {related > 0 && (
+          <div className="tx-row" style={{ gap: 8 }}>
+            <span className="tx-mark">
+              Relacionado con #{related}
+              <button type="button" className="tx-btn ghost icon sm" aria-label={`Quitar la relación con #${related}`} onClick={() => setRelated(0)}>
+                <Ic n="x" />
+              </button>
+            </span>
+            <span className="tx-caption">Precargamos el servicio, la prioridad y los datos del incidente cerrado. Contá qué está pasando ahora.</span>
+          </div>
+        )}
         <form
+          key={formKey}
           className="tx-inline-form tx-glass"
           aria-label="Crear incidente"
           noValidate
@@ -69,13 +93,25 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
             for (const f of config.fields) bad[f.key] = f.required && !custom[f.key]?.trim()
             setErrs(bad)
             if (Object.values(bad).some(Boolean)) return
-            const body = { title, description, service, priority: prio, fields: custom, assigneeId: Number(assigneeId ?? 0), problemId: notice && linkIt ? match.id : 0 }
+            const body = {
+              title,
+              description,
+              service,
+              priority: prio,
+              fields: custom,
+              assigneeId: Number(assigneeId ?? 0),
+              problemId: notice && linkIt ? match.id : 0,
+              relatedIncidentId: related,
+            }
             // Mientras se guarda, el botón queda deshabilitado: un doble clic no duplica el ticket.
             setBusy(true)
             const ok = await run(api.createIncident(body))
             setBusy(false)
             if (ok) {
-              form.reset()
+              // El formulario se vuelve a montar vacío: sin la precarga del relacionado.
+              setFormKey(formKey + 1)
+              setPrefill(undefined)
+              setRelated(0)
               setService('')
               setPrio('media')
               setLinkIt(true)
@@ -90,6 +126,7 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
               id="q"
               name="title"
               className="tx-input"
+              autoFocus={!!prefill}
               placeholder="Describí el síntoma en una línea"
               aria-invalid={errs.title || undefined}
               aria-describedby={errs.title ? 'q-e' : undefined}
@@ -127,7 +164,11 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
                 </button>
               ))}
             </div>
-            {sla && <span className="tx-help">SLA: {config.slaHours[prio]} h para resolver</span>}
+            {sla && (
+              <span className="tx-help">
+                SLA: primera respuesta en {config.responseHours[prio]} h, resolución en {config.slaHours[prio]} h
+              </span>
+            )}
           </div>
 
           <button className="tx-btn primary" style={{ height: 38 }} disabled={busy}>
@@ -143,14 +184,29 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
                   {f.label} {f.required ? <span className="req">*</span> : <span className="opt">Opcional</span>}
                 </label>
                 {f.type === 'select' ? (
-                  <select id={`f-${f.key}`} name={f.key} className="tx-input" aria-invalid={errs[f.key] || undefined} defaultValue="">
+                  <select
+                    id={`f-${f.key}`}
+                    name={f.key}
+                    className="tx-input"
+                    aria-invalid={errs[f.key] || undefined}
+                    aria-describedby={errs[f.key] ? `f-${f.key}-e` : undefined}
+                    defaultValue={prefill?.fields[f.key] ?? ''}
+                  >
                     <option value="">Elegí una opción</option>
                     {f.options.map((o) => (
                       <option key={o}>{o}</option>
                     ))}
                   </select>
                 ) : (
-                  <input id={`f-${f.key}`} name={f.key} type={f.type} className="tx-input" aria-invalid={errs[f.key] || undefined} />
+                  <input
+                    id={`f-${f.key}`}
+                    name={f.key}
+                    type={f.type}
+                    className="tx-input"
+                    aria-invalid={errs[f.key] || undefined}
+                    aria-describedby={errs[f.key] ? `f-${f.key}-e` : undefined}
+                    defaultValue={prefill?.fields[f.key] ?? ''}
+                  />
                 )}
                 {errs[f.key] && <FieldError id={`f-${f.key}-e`}>Completá este campo.</FieldError>}
               </div>
@@ -231,21 +287,25 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
                   {sla && <th>SLA</th>}
                   <th>Asignado</th>
                   {showProblem && <th>Problema</th>}
-                  <th style={{ textAlign: 'right' }}>Estado</th>
+                  <th style={{ textAlign: 'right' }}>Etapa · estado</th>
                 </tr>
               </thead>
               <tbody>
                 {[...lists[filter]].reverse().map((i) => (
                   <tr key={i.id}>
                     <td className="w-id" data-label="ID">
-                      <A className="tx-id" aria-label={`Abrir el incidente ${i.id}`} onClick={() => setDetail(i.id)}>
-                        #{i.id}
-                      </A>
+                      <IncidentId id={i.id} go={open} />
                     </td>
                     <td className="t-title">
-                      <A style={{ color: 'inherit' }} onClick={() => setDetail(i.id)}>
+                      <A style={{ color: 'inherit' }} onClick={() => open(i.id)}>
                         {i.title}
                       </A>
+                      {i.reopenCount > 0 && (
+                        <span className="tx-reopen" title={`Reabierto ${count(i.reopenCount, 'vez', 'veces')}`}>
+                          <Ic n="recur" />
+                          {i.reopenCount > 1 ? `Reabierto ×${i.reopenCount}` : 'Reabierto'}
+                        </span>
+                      )}
                       <div className="tx-caption">{i.service}</div>
                     </td>
                     <td data-label="Prioridad">
@@ -269,7 +329,7 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
                       </td>
                     )}
                     <td data-label="Estado" style={{ textAlign: 'right' }}>
-                      <IncBadge i={i} />
+                      <IncStage i={i} />
                     </td>
                   </tr>
                 ))}
@@ -278,132 +338,6 @@ export function Incidents({ state, run, goProblem }: { state: State; run: Run; g
           </div>
         )}
       </section>
-
-      {detail > 0 && <IncidentDialog id={detail} state={state} run={run} goProblem={goProblem} onClose={() => setDetail(0)} />}
     </>
-  )
-}
-
-// Detalle de un incidente: datos propios de la empresa, SLA y las tres decisiones (estado, persona, problema).
-function IncidentDialog({ id, state, run, goProblem, onClose }: { id: number; state: State; run: Run; goProblem?: (id: number) => void; onClose: () => void }) {
-  const { config, users, problems } = state
-  const canResolve = can(state, 'resolver')
-  const i = state.incidents.find((x) => x.id === id)
-  if (!i) return null
-  const p = problems.find((x) => x.id === i.problemId)
-  const closed = config.states[config.states.length - 1]
-  const patch = (b: Parameters<typeof api.updateIncident>[1]) => run(api.updateIncident(i.id, b))
-
-  return (
-    <Dialog
-      title={`#${i.id} ${i.title}`}
-      sub={`${i.service} · creado el ${fmt(i.createdAt)}`}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="tx-btn ghost" onClick={onClose}>
-            Cerrar
-          </button>
-          {canResolve && !i.resolvedAt && (
-            <button type="button" className="tx-btn primary" onClick={() => patch({ status: closed })}>
-              <Ic n="check" />
-              {p?.workaround ? 'Resolver con workaround' : `Pasar a ${closed}`}
-            </button>
-          )}
-        </>
-      }
-    >
-      <div className="tx-row">
-        <Prio p={i.priority} />
-        <IncBadge i={i} />
-        {i.dueAt && <Sla i={i} />}
-        {!canResolve && <span className="tx-caption">Asignado a: {userName(users, i.assigneeId, 'nadie todavía')}</span>}
-      </div>
-      {i.description && <p>{i.description}</p>}
-      {config.fields.some((f) => i.fields[f.key]) && (
-        <div className="tx-callout">
-          <div className="tx-cols">
-            {config.fields
-              .filter((f) => i.fields[f.key])
-              .map((f) => (
-                <div key={f.key} className="tx-block">
-                  <span className="tx-overline">{f.label}</span>
-                  <p>{i.fields[f.key]}</p>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
-      {p?.workaround && p.status !== 'resuelto' && <Workaround text={p.workaround} />}
-
-      {canResolve && (
-      <>
-      <div className="tx-cols">
-        <div className="tx-field">
-          <label className="tx-label" htmlFor="id-st">
-            Estado
-          </label>
-          <select id="id-st" className="tx-input" value={i.status} onChange={(e) => patch({ status: e.target.value })}>
-            {config.states.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-        <div className="tx-field">
-          <label className="tx-label" htmlFor="id-as">
-            Asignado a
-          </label>
-          <select id="id-as" className="tx-input" value={i.assigneeId} onChange={(e) => patch({ assigneeId: Number(e.target.value) })}>
-            <option value={0}>Sin asignar</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      {config.modules.problems && (
-      <div className="tx-field">
-        <label className="tx-label" htmlFor="id-pr">
-          Problema asociado
-        </label>
-        {p ? (
-          <div className="tx-row" style={{ gap: 8 }}>
-            <ProblemId
-              id={p.id}
-              go={
-                goProblem &&
-                ((id) => {
-                  onClose()
-                  goProblem(id)
-                })
-              }
-            />
-            <span className="tx-strong">{p.title}</span>
-            <StatusBadge s={p.status} />
-            {p.status !== 'resuelto' && (
-              <button type="button" className="tx-btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => patch({ problemId: 0 })}>
-                Desvincular
-              </button>
-            )}
-          </div>
-        ) : (
-          <select id="id-pr" className="tx-input" value="" onChange={(e) => patch({ problemId: Number(e.target.value) })}>
-            <option value="">Sin problema: vincular a…</option>
-            {problems
-              .filter((x) => x.status !== 'resuelto')
-              .map((x) => (
-                <option key={x.id} value={x.id}>
-                  P-{x.id} {x.title}
-                </option>
-              ))}
-          </select>
-        )}
-      </div>
-      )}
-      </>
-      )}
-    </Dialog>
   )
 }

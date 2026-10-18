@@ -63,11 +63,22 @@ select.tx-input { cursor: pointer; }
 /* Arriba, centrados en la altura de la primera línea (38 px, la de un .tx-input), aunque las opciones ocupen varias. */
 .cfg-field > .tx-check, .cfg-field > .tx-caption { display: flex; align-items: center; min-height: 38px; }
 .cfg-field > .tx-btn { margin-top: 4px; }
-.cfg-num { width: 84px !important; text-align: center; }
-.cfg-line .cfg-num { flex: none; } /* horas de SLA y regla de recurrencia: 84 px, sin estirarse ni achicarse */
+/* Cajas numéricas de Configuración (horas de SLA, recurrencia, días de cierre): siempre 84 px, sin estirarse con .cfg-line
+   ni achicarse dentro de una fila o una grilla. */
+.cfg-num, .cfg-line .cfg-num { flex: none; width: 84px !important; text-align: center; }
 /* Opciones de un campo Lista: caja de varias líneas que crece con el contenido (la altura la ajusta AutoGrow). Una línea mide lo mismo que un .tx-input. */
 .cfg-options { min-height: 38px; padding: 7px 12px; resize: none; overflow: hidden; }
-.cfg-save { position: sticky; bottom: 16px; z-index: 4; display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.cfg-save { position: sticky; bottom: 16px; z-index: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
+.cfg-save .grow { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* Horas por prioridad: prioridad, primera respuesta y resolución. Debajo de 640 px la prioridad pasa a su propia fila (ver abajo). */
+.cfg-sla { display: grid; grid-template-columns: max-content repeat(2, minmax(0, 1fr)); gap: 8px 12px; align-items: center; }
+.cfg-hours { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* Estados del ticket: el check de pausa va en su propia línea, debajo del nombre, en cualquier ancho:
+   al lado del nombre lo dejaba angosto en la tarjeta de media pantalla. */
+.cfg-extra { flex-wrap: wrap; row-gap: 4px; }
+.cfg-extra-item { order: 3; flex-basis: 100%; padding-left: 30px; }
+/* Contadores de los encabezados ("3 de 5"): siempre en una línea */
+.tx-panel-head > .tx-chip { flex: none; white-space: nowrap; }
 fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 
 .cfg-user { padding: 10px 0; border-top: 1px solid var(--hairline); }
@@ -130,14 +141,70 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 @media (max-width: 329px) {
   .tx-nav-item { width: 32px; }
 }
+/* ---------- Incidentes: etapa ITIL y estado del flujo ----------
+   La etapa (Abierto, Resuelto, Cerrado) es un badge redondo con punto; el estado configurable, una etiqueta rectangular.
+   Todo sale de los tokens, que ya traen modo claro y oscuro. */
+.tx-badge.stage-abierto { color: var(--brand-ink); background: var(--brand-tint); }
+.tx-badge.stage-abierto::before { background: var(--brand); }
+.tx-badge.stage-cerrado { color: var(--ink-muted); background: var(--surface-hover); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+.tx-badge.stage-cerrado::before { background: var(--ink-muted); }
+.tx-state {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; white-space: nowrap;
+  font-size: 12px; line-height: 16px; font-weight: 550; color: var(--ink-muted);
+  background: var(--surface-solid); border: 1px solid var(--hairline-strong);
+}
+.tx-reopen { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--status-conocido-fg); vertical-align: middle; margin-left: 6px; }
+.tx-reopen .tx-ic { width: 12px; height: 12px; }
+.tx-mark { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 4px 0 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 550; color: var(--brand-ink); background: var(--brand-tint); }
+.tx-mark .tx-btn { height: 20px; width: 20px; color: inherit; }
+
+/* Panel lateral: pares dato / valor */
+.inc-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 14px; margin: 0; font-size: 13px; align-items: baseline; }
+.inc-facts dt { color: var(--ink-subtle); font-weight: 500; font-size: 12px; }
+.inc-facts dd { margin: 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* Actividad: respuestas al solicitante y notas internas se distinguen del resto de los eventos */
+.tx-tl.c-estado { --tl-c: var(--status-analisis-dot); }
+.tx-tl.c-resuelto { --tl-c: var(--status-resuelto-dot); }
+.tx-tl.c-reabierto { --tl-c: var(--status-conocido-dot); }
+.tx-tl.c-cerrado { --tl-c: var(--ink); }
+.tx-tl.c-respuesta { --tl-c: var(--brand); }
+.tx-tl.c-nota { --tl-c: var(--status-conocido-dot); }
+.tx-tl .msg { margin: 4px 0 2px; padding: 10px 12px; border-radius: var(--radius-md); font-size: 14px; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-sunken); border: 1px solid var(--hairline); }
+.tx-tl.c-nota .msg { background: var(--status-conocido-bg); border: 1px dashed var(--status-conocido-dot); }
+.tx-tl .msg .tx-overline { display: flex; gap: 6px; align-items: center; margin-bottom: 2px; }
+.tx-tl.c-nota .msg .tx-overline { color: var(--status-conocido-fg); }
+.inc-composer { display: flex; flex-direction: column; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--hairline); }
+.inc-composer .tx-seg { max-width: 440px; }
+.inc-composer.is-note .tx-textarea { background: var(--status-conocido-bg); }
+
+/* Gestión y SLA del detalle: los textos de vencimiento pueden partirse en el panel angosto */
+.inc-facts .tx-caption { white-space: normal !important; }
+.inc-composer .tx-seg { height: auto; min-height: 38px; }
+.inc-composer .tx-seg button { padding: 6px 8px; text-align: center; }
+
+/* Panel: hasta 4 indicadores por fila, repartidos según cuántos apliquen */
+.tx-metrics.kpi-row { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
 @media (max-width: 1100px) {
-  .viz-grid, .cfg-grid { grid-template-columns: 1fr; }
+  .viz-grid, .cfg-grid { grid-template-columns: minmax(0, 1fr); }
+  /* El bundle deja la grilla del detalle en 1fr, que crece con el contenido: así no se pasa del ancho. */
+  .tx-detail-grid { grid-template-columns: minmax(0, 1fr); }
   .viz-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .onb-layout { grid-template-columns: 1fr; }
   .onb-preview { position: static; }
 }
 @media (max-width: 640px) {
   .cfg-field { grid-template-columns: 1fr 1fr; }
+  .cfg-field > * { min-width: 0; }
+  /* Horas por prioridad: con cajas fijas de 84 px no entran tres columnas; la prioridad va en su fila y debajo sus dos horas */
+  .cfg-sla { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cfg-sla > :first-child { display: none; }
+  .cfg-sla .cfg-prio { grid-column: 1 / -1; margin-top: 4px; }
+  /* Usuarios: nombre al lado del avatar; rol y eliminar en la línea de abajo */
+  .cfg-user { flex-wrap: wrap; }
+  .cfg-user > div { flex: 1 1 calc(100% - 42px) !important; }
+  .cfg-user select.tx-input { flex: 1 1 0 !important; margin-left: 42px; }
   .onb-picks, .onb-picks.two { grid-template-columns: 1fr; }
   .onb-step { padding: 20px; }
 }
