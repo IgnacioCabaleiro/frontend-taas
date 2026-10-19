@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Problem, type State } from './api'
-import { A, Dialog, FieldError, Filters, Ic, IncBadge, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, can, count, fields, fmt, userName, type Run } from './ui'
+import { A, Dialog, FieldError, Filters, Ic, IncStage, IncidentId, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, can, count, fields, fmt, userName, type Run } from './ui'
 
 export function Board({ state, run, open }: { state: State; run: Run; open: (id: number) => void }) {
   const { incidents, problems, suggestions } = state
@@ -165,11 +165,11 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
 
 const PANEL_TITLE = ['Problema identificado', 'Análisis de causa raíz', 'Error conocido', 'Problema resuelto']
 
-export function ProblemDetail({ p, state, run, back }: { p: Problem; state: State; run: Run; back: () => void }) {
+export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem; state: State; run: Run; back: () => void; goIncident?: (id: number) => void }) {
   const { users, config } = state
   const canResolve = can(state, 'resolver')
   const incidents = state.incidents.filter((i) => i.problemId === p.id)
-  const closed = config.states[config.states.length - 1]
+  const resolvedState = config.states[config.states.length - 1]
   const step = STEPS.indexOf(p.status)
   const abiertos = incidents.filter((i) => !i.resolvedAt).length
   const [invalid, setInvalid] = useState(false)
@@ -346,7 +346,7 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
               ) : (
                 <span className="tx-help" id="sol-h">
                   {abiertos > 0
-                    ? `Al resolver, ${abiertos === 1 ? 'se cierra el incidente abierto vinculado' : `se cierran los ${abiertos} incidentes abiertos vinculados`}.`
+                    ? `Al resolver, ${abiertos === 1 ? 'se resuelve el incidente abierto vinculado' : `se resuelven los ${abiertos} incidentes abiertos vinculados`} con la solución como nota.`
                     : 'No quedan incidentes abiertos vinculados.'}
                 </span>
               )}
@@ -354,7 +354,7 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
             <div className="tx-actions">
               <button className="tx-btn primary lg">
                 <Ic n="check" />
-                Resolver problema{abiertos > 0 && ` y cerrar ${count(abiertos, 'incidente')}`}
+                Resolver problema{abiertos > 0 && ` y ${count(abiertos, 'incidente')}`}
               </button>
             </div>
           </form>
@@ -367,7 +367,7 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
             {p.workaround && <Workaround text={p.workaround} />}
             <Solution text={p.solution} />
             <div className="tx-caption">
-              Resuelto el {when(3)} · {count(incidents.length, 'incidente')} {incidents.length === 1 ? 'cerrado' : 'cerrados'}
+              Resuelto el {when(3)} · {count(incidents.length, 'incidente')} {incidents.length === 1 ? 'vinculado' : 'vinculados'}
             </div>
           </section>
         )}
@@ -385,20 +385,24 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
                 {incidents.map((i) => (
                   <div key={i.id} className="tx-inc">
                     <div className="top">
-                      <span className="tx-id">#{i.id}</span>
+                      <IncidentId id={i.id} go={goIncident} />
                       <span className="t">{i.title}</span>
                     </div>
                     <div className="bot">
                       <Prio p={i.priority} />
+                      {/* Solo los abiertos se resuelven: un resuelto o un cerrado ya tiene su resolución. */}
                       {i.resolvedAt ? (
-                        <IncBadge i={i} />
+                        <IncStage i={i} />
                       ) : p.workaround && canResolve ? (
-                        <button className="tx-btn secondary sm" onClick={() => run(api.updateIncident(i.id, { status: closed }))}>
+                        <button
+                          className="tx-btn secondary sm"
+                          onClick={() => run(api.updateIncident(i.id, { status: resolvedState, resolutionCode: 'workaround', resolutionNote: p.workaround }))}
+                        >
                           <Ic n="bulb" />
                           Resolver con workaround
                         </button>
                       ) : (
-                        <IncBadge i={i} />
+                        <IncStage i={i} />
                       )}
                     </div>
                   </div>
@@ -414,7 +418,7 @@ export function ProblemDetail({ p, state, run, back }: { p: Problem; state: Stat
               onSubmit={async (e) => {
                 e.preventDefault()
                 const form = e.currentTarget
-                if (await run(api.comment(p.id, fields(form).text))) form.reset()
+                if (await run(api.commentProblem(p.id, fields(form).text))) form.reset()
               }}
             >
               <input name="text" className="tx-input" placeholder="Sumá un comentario o un hallazgo" aria-label="Comentario" required />

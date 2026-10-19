@@ -28,7 +28,8 @@ docker run -p 5173:80 taas-frontend
 | `Auth.tsx` | ingreso y alta de cuenta |
 | `Onboarding.tsx` | asistente del titular: rubro, servicios, cómo trabaja, equipo y primer ticket |
 | `Dashboard.tsx` | panel de visualización |
-| `Incidents.tsx` | alta, lista y detalle de incidentes |
+| `Incidents.tsx` | alta y lista de incidentes, con filtros por etapa |
+| `IncidentDetail.tsx` | detalle de un incidente: ciclo de vida ITIL, actividad, SLA, resolución, reapertura y cierre |
 | `Problems.tsx` | tablero y detalle de problemas |
 | `KnownErrors.tsx` | base de errores conocidos |
 | `Settings.tsx` | usuarios, roles y configuración de la ticketera |

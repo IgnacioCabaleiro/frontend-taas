@@ -1,7 +1,7 @@
 // Panel de visualización. Todo se calcula en el cliente a partir del estado de la empresa.
 import { useState } from 'react'
 import type { Incident, Priority, State } from './api'
-import { Filters, ProblemId, STATUS, STEPS, StatusBadge, count, isLate } from './ui'
+import { Filters, ProblemId, STATUS, STEPS, StatusBadge, count, isLate, isResponseLate } from './ui'
 
 // Las 00:00 de hace n días. setDate (y no restar 24 h) evita correrse una hora con el cambio de horario.
 const midnight = (n: number) => {
@@ -15,6 +15,11 @@ const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : null)
 const show = (v: number | null, unit = '%') => (v === null ? '—' : `${v}${unit}`)
 // SLA medible: incidentes ya resueltos, más los abiertos que ya vencieron.
 const judged = (list: Incident[]) => list.filter((i) => i.resolvedAt || isLate(i))
+// Primera respuesta medible: la que ya llegó, más la que ya venció sin llegar.
+const judgedResponse = (list: Incident[]) => list.filter((i) => i.responseDueAt && (i.firstResponseAt || isResponseLate(i)))
+const avgHours = (list: number[]) => (list.length ? list.reduce((a, b) => a + b, 0) / list.length : null)
+const showHours = (h: number | null) => (h === null ? '—' : `${h.toFixed(1)} h`)
+type Kpi = { on: boolean; label: string; dot: string; val: string; foot: string }
 
 export function Dashboard({ state, openProblem }: { state: State; openProblem?: (id: number) => void }) {
   const { sla, problems: withProblems } = state.config.modules
@@ -32,21 +37,28 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
   const resolved = inc.filter((i) => i.resolvedAt)
   const measurable = judged(inc)
   const lateCount = measurable.filter(isLate).length
-  const hours = resolved.map((i) => (+new Date(i.resolvedAt!) - +new Date(i.createdAt)) / 36e5)
-  const mttr = hours.length ? hours.reduce((a, b) => a + b, 0) / hours.length : null
+  const mttr = avgHours(resolved.map((i) => (+new Date(i.resolvedAt!) - +new Date(i.createdAt)) / 36e5))
+  const responded = inc.filter((i) => i.firstResponseAt)
+  const mtfr = avgHours(responded.map((i) => (+new Date(i.firstResponseAt!) - +new Date(i.createdAt)) / 36e5))
   const investigated = inc.filter((i) => i.problemId).length
+  const reopened = inc.filter((i) => i.reopenCount > 0).length
 
-  // Cuatro indicadores: los de SLA y de causa investigada solo existen si la cuenta tiene esos módulos.
-  const kpis = [
-    { on: true, label: 'Incidentes', dot: 'var(--viz-1)', val: String(inc.length), foot: `${inc.length - resolved.length} siguen abiertos` },
-    { on: sla, label: 'Cumplimiento de SLA', dot: 'var(--status-resuelto-dot)', val: show(pct(measurable.length - lateCount, measurable.length)), foot: `${lateCount} fuera de SLA` },
-    { on: true, label: 'Tiempo medio de resolución', dot: 'var(--ink-subtle)', val: mttr === null ? '—' : `${mttr.toFixed(1)} h`, foot: `sobre ${count(resolved.length, 'resuelto')}` },
-    { on: withProblems, label: 'Con causa investigada', dot: 'var(--viz-2)', val: show(pct(investigated, inc.length)), foot: `${inc.length - investigated} sin problema asociado` },
-    { on: true, label: 'Resueltos', dot: 'var(--status-resuelto-dot)', val: String(resolved.length), foot: `${show(pct(resolved.length, inc.length))} de los del período` },
-    { on: true, label: 'Sin asignar', dot: 'var(--prio-alta-dot)', val: String(inc.filter((i) => !i.resolvedAt && !i.assigneeId).length), foot: 'abiertos que nadie tomó' },
-  ]
-    .filter((k) => k.on)
-    .slice(0, 4)
+  // Hasta ocho indicadores en dos filas: volumen y tiempos. Los de SLA y de causa investigada solo existen
+  // si la cuenta tiene esos módulos.
+  const rows: Kpi[][] = [
+    [
+      { on: true, label: 'Incidentes', dot: 'var(--viz-1)', val: String(inc.length), foot: `${inc.length - resolved.length} siguen abiertos` },
+      { on: true, label: 'Resueltos', dot: 'var(--status-resuelto-dot)', val: String(resolved.length), foot: `${show(pct(resolved.length, inc.length))} de los del período` },
+      { on: true, label: 'Sin asignar', dot: 'var(--prio-alta-dot)', val: String(inc.filter((i) => !i.resolvedAt && !i.assigneeId).length), foot: 'abiertos que nadie tomó' },
+      { on: true, label: 'Reabiertos', dot: 'var(--status-conocido-dot)', val: String(reopened), foot: `${show(pct(reopened, inc.length))} de los del período` },
+    ],
+    [
+      { on: sla, label: 'Cumplimiento de SLA', dot: 'var(--status-resuelto-dot)', val: show(pct(measurable.length - lateCount, measurable.length)), foot: `${lateCount} fuera de SLA de resolución` },
+      { on: true, label: 'Tiempo medio de primera respuesta', dot: 'var(--brand)', val: showHours(mtfr), foot: `sobre ${count(responded.length, 'respondido')}` },
+      { on: true, label: 'Tiempo medio de resolución', dot: 'var(--ink-subtle)', val: showHours(mttr), foot: `sobre ${count(resolved.length, 'resuelto')}` },
+      { on: withProblems, label: 'Con causa investigada', dot: 'var(--viz-2)', val: show(pct(investigated, inc.length)), foot: `${inc.length - investigated} sin problema asociado` },
+    ],
+  ].map((r) => r.filter((k) => k.on))
 
   // Incidentes por día.
   const perDay = Array.from({ length: days }, (_, d) => {
@@ -76,6 +88,10 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
     const list = judged(inc.filter((i) => i.priority === p))
     return { p, ok: list.filter((i) => !isLate(i)).length, total: list.length }
   })
+  const perPrioResponse = PRIOS.map((p) => {
+    const list = judgedResponse(inc.filter((i) => i.priority === p))
+    return { p, ok: list.filter((i) => !isResponseLate(i)).length, total: list.length }
+  })
 
   const top = state.problems
     .map((p) => {
@@ -97,18 +113,20 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
         ]}
       />
 
-      <section className="tx-metrics" aria-label="Indicadores del período">
-        {kpis.map((m) => (
-          <div key={m.label} className="tx-metric tx-glass">
-            <div className="lbl">
-              <span className="dot" style={{ background: m.dot }} />
-              {m.label}
+      {rows.map((row, r) => (
+        <section key={r} className="tx-metrics kpi-row" aria-label={r === 0 ? 'Volumen del período' : 'Tiempos del período'} style={r ? { marginTop: -8 } : undefined}>
+          {row.map((m) => (
+            <div key={m.label} className="tx-metric tx-glass">
+              <div className="lbl">
+                <span className="dot" style={{ background: m.dot }} />
+                {m.label}
+              </div>
+              <div className="val">{m.val}</div>
+              <div className="foot">{m.foot}</div>
             </div>
-            <div className="val">{m.val}</div>
-            <div className="foot">{m.foot}</div>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      ))}
 
       <div className="viz-grid">
         <section className="viz-card tx-solid">
@@ -188,26 +206,10 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
         <section className="viz-card tx-solid">
           <div>
             <h2 className="tx-h3">Cumplimiento de SLA por prioridad</h2>
-            <p className="tx-caption">Resueltos a tiempo sobre los resueltos y los abiertos ya vencidos.</p>
+            <p className="tx-caption">A tiempo sobre lo ya medible: lo que llegó y lo que venció sin llegar.</p>
           </div>
-          <div className="viz-rows">
-            {perPrio.map((r) => {
-              const v = pct(r.ok, r.total)
-              return (
-                <div key={r.p} style={{ display: 'contents' }}>
-                  <span className="lbl">
-                    {r.p[0].toUpperCase() + r.p.slice(1)} · {state.config.slaHours[r.p]} h
-                  </span>
-                  <div className="viz-track meter" title={`${r.ok} de ${r.total} dentro del SLA`}>
-                    {v !== null && v > 0 && <div className="viz-seg" style={{ width: `${v}%`, background: 'var(--viz-1)', borderRadius: 4 }} />}
-                  </div>
-                  <span className="val">
-                    {show(v)} <small>{r.ok}/{r.total}</small>
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+          <SlaRows title="Primera respuesta" rows={perPrioResponse} hours={state.config.responseHours} />
+          <SlaRows title="Resolución" rows={perPrio} hours={state.config.slaHours} />
         </section>
         )}
 
@@ -276,5 +278,32 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
       </section>
       )}
     </>
+  )
+}
+
+// Una fila por prioridad: cuántos se cumplieron a tiempo, sobre cuántos ya se pueden medir.
+function SlaRows({ title, rows, hours }: { title: string; rows: { p: Priority; ok: number; total: number }[]; hours: Record<Priority, number> }) {
+  return (
+    <div className="tx-stack" style={{ gap: 8 }}>
+      <span className="tx-overline">{title}</span>
+      <div className="viz-rows">
+        {rows.map((r) => {
+          const v = pct(r.ok, r.total)
+          return (
+            <div key={r.p} style={{ display: 'contents' }}>
+              <span className="lbl">
+                {r.p[0].toUpperCase() + r.p.slice(1)} · {hours[r.p]} h
+              </span>
+              <div className="viz-track meter" title={`${title}: ${r.ok} de ${r.total} a tiempo`}>
+                {v !== null && v > 0 && <div className="viz-seg" style={{ width: `${v}%`, background: 'var(--viz-1)', borderRadius: 4 }} />}
+              </div>
+              <span className="val">
+                {show(v)} <small>{r.ok}/{r.total}</small>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }

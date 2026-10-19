@@ -13,8 +13,11 @@ export type Field = { key: string; label: string; type: 'text' | 'number' | 'sel
 export type Config = {
   modules: { sla: boolean; problems: boolean }
   services: string[]
-  states: string[] // estados del incidente, en orden; el último es el de cierre
-  slaHours: Record<Priority, number>
+  states: string[] // estados del incidente, en orden; el último es el de resolución (el cierre es una etapa aparte)
+  slaHours: Record<Priority, number> // horas para resolver
+  responseHours: Record<Priority, number> // horas para la primera respuesta
+  pauseStates: string[] // estados que detienen el reloj de resolución (nunca el primero ni el último)
+  autoCloseDays: number // días sin actividad tras los que un incidente resuelto se cierra solo
   fields: Field[]
   recurrenceMin: number
   recurrenceDays: number
@@ -35,8 +38,38 @@ export type Incident = {
   assigneeId: number // 0 = sin asignar
   problemId: number // 0 = sin problema
   createdAt: string
-  dueAt?: string // vencimiento del SLA, si el módulo está activo
+  dueAt?: string // vencimiento de la resolución, si el módulo SLA está activo (ya descuenta las pausas)
   resolvedAt?: string
+  history: IncidentEvent[]
+  responseDueAt?: string // vencimiento de la primera respuesta: se fija al registrar y nunca se mueve
+  firstResponseAt?: string
+  pausedAt?: string // si está, el reloj de resolución está detenido desde ese momento
+  resolutionCode: ResolutionCode | '' // '' si no está resuelto (o es un resuelto anterior a los códigos)
+  resolutionNote: string
+  reopenCount: number
+  closedAt?: string
+  autoCloseHold: boolean // el solicitante respondió estando resuelto: ya no se cierra solo
+  relatedIncidentId: number // 0 = ninguno; si no, el incidente cerrado que este continúa
+}
+
+export type ResolutionCode = 'solucionado' | 'workaround' | 'duplicado' | 'sin_reproducir' | 'cancelado'
+// Historial del incidente (userId 0 = Sistema). Quien solo reporta no recibe las notas.
+export type IncidentEvent = {
+  at: string
+  kind: 'creado' | 'estado' | 'asignado' | 'problema' | 'respuesta' | 'nota' | 'resuelto' | 'reabierto' | 'cerrado' | 'relacionado'
+  text: string
+  userId: number
+}
+export type IncidentPatch = { status?: string; assigneeId?: number; problemId?: number; resolutionCode?: ResolutionCode; resolutionNote?: string }
+export type NewIncident = {
+  title: string
+  description?: string
+  service: string
+  priority: Priority
+  fields: Record<string, string>
+  assigneeId?: number
+  problemId?: number
+  relatedIncidentId?: number
 }
 
 export type Problem = {
@@ -125,10 +158,13 @@ export const api = {
   saveRole: (id: number, r: { name: string; perms: Perm[] }) => (id ? t(`/roles/${id}`, r, 'PUT') : t('/roles', r)),
   deleteRole: (id: number) => t(`/roles/${id}`, undefined, 'DELETE'),
 
-  createIncident: (i: Record<string, unknown>) => t('/incidents', i),
-  updateIncident: (id: number, patch: { status?: string; assigneeId?: number; problemId?: number }) => t(`/incidents/${id}`, patch),
+  createIncident: (i: NewIncident) => t('/incidents', i),
+  updateIncident: (id: number, patch: IncidentPatch) => t(`/incidents/${id}`, patch),
+  comment: (id: number, text: string, isPublic: boolean) => t(`/incidents/${id}/comments`, { text, public: isPublic }),
+  reopen: (id: number, reason: string) => t(`/incidents/${id}/reopen`, { reason }),
+  close: (id: number) => t(`/incidents/${id}/close`, {}),
   createProblem: (p: Record<string, unknown>) => t('/problems', p),
   advance: (id: number, data: Record<string, string>) => t(`/problems/${id}/advance`, data),
   setOwner: (id: number, ownerId: number) => t(`/problems/${id}/owner`, { ownerId }),
-  comment: (id: number, text: string) => t(`/problems/${id}/comments`, { text }),
+  commentProblem: (id: number, text: string) => t(`/problems/${id}/comments`, { text }),
 }

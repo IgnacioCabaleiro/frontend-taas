@@ -1,8 +1,10 @@
 // Piezas chicas compartidas: envuelven las clases tx-* del design system.
 import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react'
-import type { Incident, Perm, Priority, State, Status, User } from './api'
+import type { Config, Incident, Perm, Priority, ResolutionCode, State, Status, User } from './api'
 
-export type Run = (p: Promise<State>) => Promise<State | null>
+// onError: la pantalla muestra el error en su propio lugar (por ejemplo, junto al botón que lo provocó)
+// en vez del aviso general de arriba.
+export type Run = (p: Promise<State>, opts?: { onError?: (message: string) => void }) => Promise<State | null>
 
 // Íconos del sistema (grilla 24, trazo 1.75), tal como vienen en los previews.
 const ICONS = {
@@ -31,6 +33,9 @@ const ICONS = {
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.2 2.2M16.2 16.2l2.2 2.2M5.6 18.4l2.2-2.2M16.2 7.8l2.2-2.2"/>',
   trash: '<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>',
+  pause: '<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  reply: '<path d="M10 8 5 12l5 4"/><path d="M5 12h9a5 5 0 0 1 5 5v1"/>',
   logout: '<path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/>',
 } as const
 
@@ -142,13 +147,59 @@ export function ago(s: string) {
 
 export const count = (k: number, one: string, many = one + 's') => `${k} ${k === 1 ? one : many}`
 
-// --- Incidentes: estado configurable, SLA, personas ---
+// --- Incidentes: etapa ITIL, estado configurable, SLA, personas ---
 
-export const IncBadge = ({ i }: { i: Incident }) => <span className={`tx-badge ${i.resolvedAt ? 'resuelto' : 'abierto'}`}>{i.status}</span>
+// Etapas del ciclo de vida (ITIL 4). No son estados del flujo configurable: salen de resolvedAt y closedAt.
+export type Stage = 'abierto' | 'resuelto' | 'cerrado'
+export const stage = (i: Incident): Stage => (i.closedAt ? 'cerrado' : i.resolvedAt ? 'resuelto' : 'abierto')
+export const STAGE: Record<Stage, { label: string; cls: string }> = {
+  abierto: { label: 'Abierto', cls: 'stage-abierto' },
+  resuelto: { label: 'Resuelto', cls: 'resuelto' },
+  cerrado: { label: 'Cerrado', cls: 'stage-cerrado' },
+}
+export const StageBadge = ({ i }: { i: Incident }) => <span className={`tx-badge ${STAGE[stage(i)].cls}`}>{STAGE[stage(i)].label}</span>
+
+// Estado del flujo configurable de la cuenta (por ejemplo "En curso"): se ve distinto de la etapa.
+export const IncBadge = ({ i }: { i: Incident }) => (
+  <span className="tx-state" title="Estado del flujo">
+    {i.status}
+  </span>
+)
+
+// Etapa y, mientras está abierto, el estado del flujo en el que se está diagnosticando.
+export const IncStage = ({ i }: { i: Incident }) => (
+  <span className="tx-row" style={{ gap: 6, display: 'inline-flex', flexWrap: 'nowrap' }}>
+    <StageBadge i={i} />
+    {!i.resolvedAt && <IncBadge i={i} />}
+  </span>
+)
+
+export const RESOLUTION: Record<ResolutionCode, string> = {
+  solucionado: 'Solucionado',
+  workaround: 'Con workaround',
+  duplicado: 'Duplicado',
+  sin_reproducir: 'No se pudo reproducir',
+  cancelado: 'Cancelado',
+}
+// Con estos códigos resolver también cierra, en el mismo momento.
+export const CLOSING_CODES: ResolutionCode[] = ['duplicado', 'cancelado']
+// Los incidentes resueltos antes de que existieran los códigos tienen código vacío.
+export const resolutionLabel = (code: ResolutionCode | '') => (code ? RESOLUTION[code] : '—')
+
+// Cuándo se cierra solo un incidente resuelto: autoCloseDays días después de su última actividad, que es el último
+// evento del historial y como mínimo la resolución (cada evento nuevo reinicia la cuenta). undefined si no
+// corresponde: no está resuelto o el solicitante respondió y quedó frenado.
+export function autoCloseAt(i: Incident, c: Config): Date | undefined {
+  if (stage(i) !== 'resuelto' || i.autoCloseHold) return undefined
+  const last = Math.max(+new Date(i.resolvedAt!), ...i.history.map((h) => +new Date(h.at)))
+  return new Date(last + c.autoCloseDays * 864e5)
+}
 
 export const userName = (users: User[], id: number, none = 'Sin asignar') => users.find((u) => u.id === id)?.name ?? none
+// Autor de un evento del historial: userId 0 es el sistema (por ejemplo, el cierre automático).
+export const author = (users: User[], id: number) => (id === 0 ? 'Sistema' : userName(users, id, 'Usuario eliminado'))
 
-const dur = (ms: number) => {
+export const dur = (ms: number) => {
   const m = Math.abs(ms) / 60000
   return m < 60 ? `${Math.max(1, Math.round(m))} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`
 }
@@ -164,25 +215,75 @@ export const initials = (name: string) =>
     .join('')
     .toUpperCase()
 
-// Un incidente está fuera de SLA si se resolvió (o sigue abierto) después de su vencimiento.
-// Sin vencimiento (módulo de SLA apagado al crearlo) nunca está fuera.
-export const isLate = (i: Incident) => !!i.dueAt && +new Date(i.resolvedAt ?? Date.now()) > +new Date(i.dueAt)
+// SLA de resolución: fuera de plazo si se resolvió (o sigue abierto) después del vencimiento. Mientras está en pausa,
+// el reloj quedó detenido en pausedAt. dueAt ya descuenta las pausas anteriores. Sin vencimiento nunca está fuera.
+export const isLate = (i: Incident) => !!i.dueAt && +new Date(i.resolvedAt ?? i.pausedAt ?? Date.now()) > +new Date(i.dueAt)
+// El reloj de resolución está detenido (estado de pausa, todavía sin resolver).
+export const isPaused = (i: Incident) => !!i.pausedAt && !i.resolvedAt
+// SLA de primera respuesta: la pausa no lo afecta.
+export const isResponseLate = (i: Incident) => !!i.responseDueAt && +new Date(i.firstResponseAt ?? Date.now()) > +new Date(i.responseDueAt)
+
+const slaStyle = (late: boolean) =>
+  ({ display: 'inline-flex', gap: 4, alignItems: 'center', whiteSpace: 'nowrap', color: late ? 'var(--danger-fg)' : undefined }) as const
 
 export function Sla({ i }: { i: Incident }) {
   if (!i.dueAt) return <span className="tx-subtle">—</span>
   const late = isLate(i)
-  const left = +new Date(i.dueAt) - Date.now()
-  const text = i.resolvedAt ? (late ? 'Fuera de SLA' : 'En SLA') : late ? `Vencido hace ${dur(left)}` : `Vence en ${dur(left)}`
+  const paused = isPaused(i)
+  // En pausa, lo que queda (o lo que se pasó) se mide en el momento en que se detuvo el reloj.
+  const left = +new Date(i.dueAt) - +new Date(paused ? i.pausedAt! : Date.now())
+  const text = i.resolvedAt
+    ? late
+      ? 'Fuera de SLA'
+      : 'En SLA'
+    : paused
+      ? late
+        ? 'Vencido · en pausa'
+        : `En pausa · quedan ${dur(left)}`
+      : late
+        ? `Vencido hace ${dur(left)}`
+        : `Vence en ${dur(left)}`
   return (
-    <span
-      className="tx-caption"
-      style={{ display: 'inline-flex', gap: 4, alignItems: 'center', whiteSpace: 'nowrap', color: late ? 'var(--danger-fg)' : undefined }}
-    >
+    <span className="tx-caption" style={slaStyle(late)}>
+      {late ? <Ic n="warn" /> : paused && <Ic n="pause" />}
+      {text}
+    </span>
+  )
+}
+
+// Estado de la primera respuesta: en curso, vencida o cumplida.
+export function FirstResponse({ i }: { i: Incident }) {
+  if (!i.responseDueAt) return <span className="tx-subtle">—</span>
+  const late = isResponseLate(i)
+  const due = +new Date(i.responseDueAt)
+  const text = i.firstResponseAt
+    ? `${late ? 'Vencida · respondida' : 'Cumplida'} en ${dur(+new Date(i.firstResponseAt) - +new Date(i.createdAt))}`
+    : late
+      ? `Vencida hace ${dur(Date.now() - due)}`
+      : `En curso · vence en ${dur(due - Date.now())}`
+  return (
+    <span className="tx-caption" style={slaStyle(late)}>
       {late && <Ic n="warn" />}
       {text}
     </span>
   )
 }
+
+export const PauseBadge = () => (
+  <span className="tx-badge conocido">
+    SLA en pausa
+  </span>
+)
+
+// Link al detalle de un incidente (sin acceso a la sección, el número queda como texto).
+export const IncidentId = ({ id, go }: { id: number; go?: (id: number) => void }) =>
+  go ? (
+    <A className="tx-id" aria-label={`Abrir el incidente ${id}`} onClick={() => go(id)}>
+      #{id}
+    </A>
+  ) : (
+    <span className="tx-strong">#{id}</span>
+  )
 
 // Modal sobre <dialog> nativo (foco atrapado y Esc incluidos). El contenido va dentro de un form.
 export function Dialog(props: {

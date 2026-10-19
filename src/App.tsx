@@ -6,6 +6,7 @@ import { Onboarding } from './Onboarding'
 import { Dashboard } from './Dashboard'
 import { Board, NewProblemModal, ProblemDetail } from './Problems'
 import { Incidents } from './Incidents'
+import { IncidentDetail } from './IncidentDetail'
 import { KnownErrors } from './KnownErrors'
 import { Settings } from './Settings'
 import { SKELETON } from './Skeletons'
@@ -45,7 +46,8 @@ export default function App() {
   const [logged, setLogged] = useState(session.active())
   const [state, setState] = useState<State | null>(null)
   const [tab, setTab] = useState<Tab>('panel')
-  const [openId, setOpenId] = useState(0)
+  const [openId, setOpenId] = useState(0) // problema o incidente abierto en su sección (0 = la lista)
+  const [related, setRelated] = useState(0) // incidente cerrado desde el que se registra uno relacionado
   const [modal, setModal] = useState(false)
   const [error, setError] = useState<{ message: string; offline: boolean } | null>(null)
   const [theme, setTheme] = useState(() => storedTheme() ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
@@ -65,9 +67,10 @@ export default function App() {
     setState(null)
     setError(null)
     setOpenId(0)
+    setRelated(0)
     setModal(false)
   }
-  const run: Run = async (p) => {
+  const run: Run = async (p, opts) => {
     try {
       const s = await p
       setState(s)
@@ -75,6 +78,7 @@ export default function App() {
       return s
     } catch (e) {
       if ('expired' in (e as object)) leave() // la sesión venció o el servidor se reinició
+      else if (opts?.onError) opts.onError((e as Error).message)
       else setError({ message: (e as Error).message, offline: 'offline' in (e as object) })
       return null
     }
@@ -91,13 +95,16 @@ export default function App() {
 
   const tabs = state ? allowedTabs(state) : []
   const current = !state || tabs.includes(tab) ? tab : (tabs[0] ?? 'incidentes')
-  const go = (t: Tab, problemId = 0) => {
+  const go = (t: Tab, id = 0) => {
     setTab(t)
-    setOpenId(problemId)
+    setOpenId(id)
+    setRelated(0)
   }
   const goProblem = tabs.includes('problemas') ? (id: number) => go('problemas', id) : undefined
+  const goIncident = tabs.includes('incidentes') ? (id: number) => go('incidentes', id) : undefined
   const me = state?.users.find((u) => u.id === state.me)
   const open = current === 'problemas' ? state?.problems.find((p) => p.id === openId) : undefined
+  const openInc = current === 'incidentes' ? state?.incidents.find((i) => i.id === openId) : undefined
   const counts: Partial<Record<Tab, number>> = state
     ? {
         problemas: state.problems.filter((p) => p.status !== 'resuelto').length,
@@ -158,7 +165,7 @@ export default function App() {
         </aside>
 
         <main className="tx-main" aria-busy={!state && !error}>
-          {!open && (
+          {!open && !openInc && (
             <header className="tx-top">
               <div>
                 <h1 className="tx-h1">{T.title}</h1>
@@ -229,9 +236,27 @@ export default function App() {
           {state && state.onboarded && tabs.includes(current) && (
             <>
               {current === 'panel' && <Dashboard state={state} openProblem={goProblem} />}
-              {current === 'problemas' && open && <ProblemDetail p={open} state={state} run={run} back={() => setOpenId(0)} />}
+              {current === 'problemas' && open && <ProblemDetail p={open} state={state} run={run} back={() => setOpenId(0)} goIncident={goIncident} />}
               {current === 'problemas' && !open && <Board state={state} run={run} open={setOpenId} />}
-              {current === 'incidentes' && <Incidents state={state} run={run} goProblem={goProblem} />}
+              {current === 'incidentes' && openInc && (
+                <IncidentDetail
+                  key={openInc.id}
+                  i={openInc}
+                  state={state}
+                  run={run}
+                  error={error?.message}
+                  back={() => go('incidentes')}
+                  goProblem={goProblem}
+                  goIncident={(id) => go('incidentes', id)}
+                  onRelated={(id) => {
+                    go('incidentes')
+                    setRelated(id)
+                  }}
+                />
+              )}
+              {current === 'incidentes' && !openInc && (
+                <Incidents state={state} run={run} goProblem={goProblem} open={(id) => go('incidentes', id)} related={related} setRelated={setRelated} />
+              )}
               {current === 'kedb' && <KnownErrors state={state} goProblem={goProblem} goIncidents={() => go('incidentes')} />}
               {current === 'config' && <Settings key={state.id} state={state} run={run} />}
             </>
