@@ -116,7 +116,7 @@ export default function App() {
             <b>TaaS</b>
             <span>· Ticketera configurable</span>
           </div>
-          <div style={{ padding: '0 10px 16px' }}>
+          <div className="side-org" style={{ padding: '0 10px 16px' }}>
             <div className="tx-strong">{state?.name ?? ' '}</div>
             <div className="tx-caption">{state?.industry || ' '}</div>
           </div>

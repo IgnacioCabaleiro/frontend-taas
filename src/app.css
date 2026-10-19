@@ -59,8 +59,14 @@ select.tx-input { cursor: pointer; }
 .cfg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .cfg-line { display: flex; gap: 8px; align-items: center; }
 .cfg-line .tx-input { flex: 1; min-width: 0; }
-.cfg-field { display: grid; grid-template-columns: minmax(0, 1.4fr) 120px minmax(0, 1.6fr) auto auto; gap: 8px; align-items: center; }
+.cfg-field { display: grid; grid-template-columns: minmax(0, 1.4fr) 120px minmax(0, 1.6fr) auto auto; gap: 8px; align-items: start; }
+/* Arriba, centrados en la altura de la primera línea (38 px, la de un .tx-input), aunque las opciones ocupen varias. */
+.cfg-field > .tx-check, .cfg-field > .tx-caption { display: flex; align-items: center; min-height: 38px; }
+.cfg-field > .tx-btn { margin-top: 4px; }
 .cfg-num { width: 84px !important; text-align: center; }
+.cfg-line .cfg-num { flex: none; } /* horas de SLA y regla de recurrencia: 84 px, sin estirarse ni achicarse */
+/* Opciones de un campo Lista: caja de varias líneas que crece con el contenido (la altura la ajusta AutoGrow). Una línea mide lo mismo que un .tx-input. */
+.cfg-options { min-height: 38px; padding: 7px 12px; resize: none; overflow: hidden; }
 .cfg-save { position: sticky; bottom: 16px; z-index: 4; display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
 fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 
@@ -106,6 +112,24 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 .onb-new { animation: onb-in var(--tx-base) var(--tx-ease); }
 @keyframes onb-in { from { opacity: 0; transform: translateY(4px); } }
 
+/* Barra compacta (mismo corte que el design system, que ahí esconde .tx-side-foot):
+   se muestran solo los botones de tema y cerrar sesión, a la derecha de la navegación, y se esconde la empresa. */
+@media (max-width: 960px) {
+  .side-org { display: none; }
+  .tx-side-foot { display: flex; margin-top: 0; padding: 0; border-top: 0; }
+  .tx-side-foot > :not(button) { display: none; }
+  /* Solo íconos en toda la barra compacta, como el design system debajo de 640 px (el nombre sigue en el aria-label). */
+  .tx-nav-item .lbl, .tx-nav-item .tx-count { display: none; }
+  .tx-nav-item { width: 38px; justify-content: center; padding: 0; }
+}
+/* Celulares angostos: sin la marca la barra entra con ítems de 38 px desde 330 px (medido con 5 secciones);
+   debajo, los ítems bajan a 32 px, el mínimo usable. */
+@media (max-width: 389px) {
+  .tx-brand { display: none; }
+}
+@media (max-width: 329px) {
+  .tx-nav-item { width: 32px; }
+}
 @media (max-width: 1100px) {
   .viz-grid, .cfg-grid { grid-template-columns: 1fr; }
   .viz-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
