@@ -1,7 +1,7 @@
 // Configuración de la cuenta: la ticketera a medida de la empresa, y quién puede hacer qué.
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState, type ComponentProps } from 'react'
 import { api, type Config, type Field, type Perm, type Priority, type State } from './api'
-import { Ic, Prio, fields, initials, type Run } from './ui'
+import { Ic, Prio, count, fields, initials, type Run } from './ui'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
 const PERMS: [Perm, string][] = [
@@ -13,6 +13,31 @@ const PERMS: [Perm, string][] = [
 ]
 const clone = (c: Config): Config => JSON.parse(JSON.stringify(c))
 const int = (s: string) => Math.max(0, Math.floor(Number(s)) || 0)
+
+// Borrador de la configuración: los números guardan el texto del input, para mostrar exactamente lo que se escribe (también vacío).
+type Draft = Omit<Config, 'slaHours' | 'recurrenceMin' | 'recurrenceDays'> & {
+  slaHours: Record<Priority, string>
+  recurrenceMin: string
+  recurrenceDays: string
+}
+// Lo que se envía. Un número vacío viaja como null: el backend lo rechaza con su mensaje (sin validación nueva en el front).
+type Sent = Omit<Config, 'slaHours' | 'recurrenceMin' | 'recurrenceDays'> & {
+  slaHours: Record<Priority, number | null>
+  recurrenceMin: number | null
+  recurrenceDays: number | null
+}
+const toDraft = (c: Config): Draft => {
+  const d = clone(c)
+  const sla = Object.fromEntries(Object.entries(d.slaHours).map(([k, v]) => [k, String(v)])) as Draft['slaHours']
+  return { ...d, slaHours: sla, recurrenceMin: String(d.recurrenceMin), recurrenceDays: String(d.recurrenceDays) }
+}
+const num = (s: string) => (s.trim() === '' ? null : int(s))
+const toSent = (d: Draft): Sent => {
+  const sla = Object.fromEntries(Object.entries(d.slaHours).map(([k, v]) => [k, num(v)])) as Sent['slaHours']
+  return { ...d, slaHours: sla, recurrenceMin: num(d.recurrenceMin), recurrenceDays: num(d.recurrenceDays) }
+}
+// Opciones de un campo Lista: la coma y el salto de línea (Enter) las separan; se muestran unidas por ", ".
+const parseOptions = (s: string) => s.split(/\r?\n|,/).map((o) => o.trimStart())
 
 function Check(props: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string; hideLabel?: boolean }) {
   return (
@@ -28,6 +53,24 @@ function Check(props: { checked: boolean; onChange: (v: boolean) => void; disabl
       {!props.hideLabel && props.label}
     </label>
   )
+}
+
+// Caja de texto que crece con su contenido (y se reacomoda si cambia su ancho), para que se lea completa.
+function AutoGrow(props: ComponentProps<'textarea'>) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const fit = () => {
+      el.style.height = 'auto'
+      el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [props.value])
+  return <textarea ref={ref} rows={1} {...props} />
 }
 
 // Lista editable de textos (servicios, estados).
@@ -64,9 +107,9 @@ export function ListEditor(props: { items: string[]; onChange: (v: string[]) => 
 }
 
 export function Settings({ state, run }: { state: State; run: Run }) {
-  const [c, setC] = useState(() => clone(state.config))
-  const dirty = JSON.stringify(c) !== JSON.stringify(state.config)
-  const set = (patch: Partial<Config>) => setC({ ...c, ...patch })
+  const [c, setC] = useState(() => toDraft(state.config))
+  const dirty = JSON.stringify(toSent(c)) !== JSON.stringify(state.config)
+  const set = (patch: Partial<Draft>) => setC({ ...c, ...patch })
   const setField = (i: number, patch: Partial<Field>) => set({ fields: c.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) })
 
   return (
@@ -122,12 +165,18 @@ export function Settings({ state, run }: { state: State; run: Run }) {
               <option value="select">Lista</option>
             </select>
             {f.type === 'select' ? (
-              <input
-                className="tx-input"
+              <AutoGrow
+                className="tx-textarea cfg-options"
                 aria-label="Opciones, separadas por coma"
                 placeholder="Opciones separadas por coma"
                 value={f.options.join(', ')}
-                onChange={(e) => setField(i, { options: e.target.value.split(',').map((o) => o.trimStart()) })}
+                onChange={(e) => {
+                  // Si Enter se convierte en ", ", el cursor queda donde estaba y no salta al final.
+                  const el = e.target
+                  const caret = parseOptions(el.value.slice(0, el.selectionStart)).join(', ').length
+                  setField(i, { options: parseOptions(el.value) })
+                  requestAnimationFrame(() => el.setSelectionRange(caret, caret))
+                }}
               />
             ) : (
               <span className="tx-caption">{f.type === 'number' ? 'Solo acepta números' : 'Texto libre'}</span>
@@ -167,8 +216,8 @@ export function Settings({ state, run }: { state: State; run: Run }) {
                     type="number"
                     min={1}
                     aria-label={`Horas de SLA para prioridad ${p}`}
-                    value={c.slaHours[p] || ''}
-                    onChange={(e) => set({ slaHours: { ...c.slaHours, [p]: int(e.target.value) } })}
+                    value={c.slaHours[p] ?? ''}
+                    onChange={(e) => set({ slaHours: { ...c.slaHours, [p]: e.target.value } })}
                   />
                   <span className="tx-muted">horas</span>
                 </label>
@@ -188,8 +237,8 @@ export function Settings({ state, run }: { state: State; run: Run }) {
                   type="number"
                   min={2}
                   aria-label="Cantidad mínima de incidentes"
-                  value={c.recurrenceMin || ''}
-                  onChange={(e) => set({ recurrenceMin: int(e.target.value) })}
+                  value={c.recurrenceMin}
+                  onChange={(e) => set({ recurrenceMin: e.target.value })}
                 />
                 incidentes del mismo servicio en
                 <input
@@ -197,8 +246,8 @@ export function Settings({ state, run }: { state: State; run: Run }) {
                   type="number"
                   min={1}
                   aria-label="Ventana en días"
-                  value={c.recurrenceDays || ''}
-                  onChange={(e) => set({ recurrenceDays: int(e.target.value) })}
+                  value={c.recurrenceDays}
+                  onChange={(e) => set({ recurrenceDays: e.target.value })}
                 />
                 días.
               </div>
@@ -212,15 +261,16 @@ export function Settings({ state, run }: { state: State; run: Run }) {
           <span className="tx-strong" style={{ flex: 1 }}>
             Tenés cambios sin guardar en tu ticketera
           </span>
-          <button type="button" className="tx-btn ghost" onClick={() => setC(clone(state.config))}>
+          <button type="button" className="tx-btn ghost" onClick={() => setC(toDraft(state.config))}>
             Descartar
           </button>
           <button
             type="button"
             className="tx-btn primary"
             onClick={async () => {
-              const s = await run(api.setConfig(c))
-              if (s) setC(clone(s.config))
+              // Sent admite null donde Config pide número: ver el comentario de Sent.
+              const s = await run(api.setConfig(toSent(c) as Config))
+              if (s) setC(toDraft(s.config))
             }}
           >
             <Ic n="check" />
@@ -354,7 +404,7 @@ function People({ state, run }: { state: State; run: Run }) {
                   <td className="t-title">
                     {r.name}
                     <div className="tx-caption">
-                      {r.locked ? 'Rol del titular' : `${users.filter((u) => u.roleId === r.id).length} usuarios`}
+                      {r.locked ? 'Rol del titular' : count(users.filter((u) => u.roleId === r.id).length, 'usuario')}
                     </div>
                   </td>
                   {PERMS.map(([perm, label]) => (
