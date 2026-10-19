@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { api, type Priority, type State } from './api'
-import { A, FieldError, Filters, Ic, IncStage, IncidentId, Prio, ProblemId, Sla, StatusBadge, can, count, fields, isLate, userName, type Run } from './ui'
+import { A, FieldError, Filters, Ic, IncStage, IncidentId, Prio, ProblemId, Sla, StatusBadge, can, count, fields, isLate, userName, usersWith, type Run } from './ui'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
 
@@ -218,7 +218,7 @@ export function Incidents(props: {
                 </label>
                 <select id="as" name="assigneeId" className="tx-input" defaultValue="0">
                   <option value="0">Sin asignar</option>
-                  {users.map((u) => (
+                  {usersWith(state, 'resolver').map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
                     </option>
