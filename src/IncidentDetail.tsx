@@ -29,6 +29,7 @@ import {
   resolutionLabel,
   stage,
   userName,
+  usersWith,
   type Run,
 } from './ui'
 
@@ -333,7 +334,7 @@ export function IncidentDetail(props: {
                 {editable ? (
                   <select id="inc-as" className="tx-input" value={i.assigneeId} onChange={(e) => patch({ assigneeId: Number(e.target.value) })}>
                     <option value={0}>Sin asignar</option>
-                    {users.map((u) => (
+                    {usersWith(state, 'resolver', i.assigneeId).map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name}
                       </option>

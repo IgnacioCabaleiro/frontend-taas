@@ -204,8 +204,13 @@ export const dur = (ms: number) => {
   return m < 60 ? `${Math.max(1, Math.round(m))} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`
 }
 
+// ¿El rol de este usuario tiene este permiso?
+export const userCan = (s: State, id: number, perm: Perm) => !!s.roles.find((r) => r.id === s.users.find((u) => u.id === id)?.roleId)?.perms.includes(perm)
 // ¿El rol del usuario logueado tiene este permiso?
-export const can = (s: State, perm: Perm) => !!s.roles.find((r) => r.id === s.users.find((u) => u.id === s.me)?.roleId)?.perms.includes(perm)
+export const can = (s: State, perm: Perm) => userCan(s, s.me, perm)
+// Para los selects de personas: los usuarios cuyo rol tiene el permiso (por ejemplo, a quién se le puede asignar un
+// incidente). El valor actual sigue en la lista aunque no lo tenga, para que el select lo muestre.
+export const usersWith = (s: State, perm: Perm, current = 0) => s.users.filter((u) => u.id === current || userCan(s, u.id, perm))
 
 export const initials = (name: string) =>
   name
@@ -251,16 +256,18 @@ export function Sla({ i }: { i: Incident }) {
   )
 }
 
-// Estado de la primera respuesta: en curso, vencida o cumplida.
+// Estado de la primera respuesta: en curso, vencida, cumplida o, si se resolvió sin responder, no cumplida.
 export function FirstResponse({ i }: { i: Incident }) {
   if (!i.responseDueAt) return <span className="tx-subtle">—</span>
   const late = isResponseLate(i)
   const due = +new Date(i.responseDueAt)
   const text = i.firstResponseAt
     ? `${late ? 'Vencida · respondida' : 'Cumplida'} en ${dur(+new Date(i.firstResponseAt) - +new Date(i.createdAt))}`
-    : late
-      ? `Vencida hace ${dur(Date.now() - due)}`
-      : `En curso · vence en ${dur(due - Date.now())}`
+    : i.resolvedAt
+      ? 'No cumplida' // resuelto o cerrado sin respuesta: el texto queda fijo (no sigue contando "hace X")
+      : late
+        ? `Vencida hace ${dur(Date.now() - due)}`
+        : `En curso · vence en ${dur(due - Date.now())}`
   return (
     <span className="tx-caption" style={slaStyle(late)}>
       {late && <Ic n="warn" />}

@@ -54,7 +54,27 @@ const toSent = (d: Draft): Sent => ({
   autoCloseDays: num(d.autoCloseDays),
 })
 // Opciones de un campo Lista: la coma y el salto de línea (Enter) las separan; se muestran unidas por ", ".
-const parseOptions = (s: string) => s.split(/\r?\n|,/).map((o) => o.trimStart())
+// No quedan opciones vacías (por ejemplo, por un Enter junto a una coma), salvo la última, que es la nueva que se está
+// escribiendo al final, y, con `hole`, la del cursor, para escribir en su lugar. Al salir de la caja se quitan todas.
+// Devuelve también dónde queda el cursor en el texto unido: en el mismo lugar de su opción o, si su opción vacía se
+// quitó, al principio de la siguiente.
+function parseOptions(text: string, at: number, hole = false) {
+  const split = (s: string) => s.split(/\r?\n|,/).map((o) => o.trimStart())
+  const all = split(text)
+  const head = split(text.slice(0, at))
+  const k = head.length - 1 // la opción en la que está el cursor
+  const kept = (j: number) => all[j] !== '' || j === all.length - 1 || (hole && j === k)
+  const caret = all.slice(0, k).reduce((n, o, j) => (kept(j) ? n + o.length + 2 : n), kept(k) ? head[k].length : 0)
+  return { options: all.filter((_, j) => kept(j)), caret }
+}
+// Backspace justo después de un separador (", ") o Supr justo antes lo borran entero y unen las dos opciones, con el
+// cursor entre las dos, como en un texto común. En un hueco vacío del medio, Backspace lo quita y deja el cursor al
+// final de la opción anterior. undefined si el cursor no está junto a un separador.
+function joinOptions(text: string, at: number, back: boolean) {
+  const sep = back ? at - 2 : at
+  if (sep < 0 || text.slice(sep, sep + 2) !== ', ') return undefined
+  return parseOptions(text.slice(0, sep) + text.slice(sep + 2), sep)
+}
 
 // Mantiene los estados de pausa al editar la lista de estados en el borrador: un estado renombrado sigue en pausa
 // con su nombre nuevo, uno quitado deja de estarlo, y ni el primero ni el último pueden pausar.
@@ -261,10 +281,26 @@ export function Settings({ state, run }: { state: State; run: Run }) {
                 onChange={(e) => {
                   // Si Enter se convierte en ", ", el cursor queda donde estaba y no salta al final.
                   const el = e.target
-                  const caret = parseOptions(el.value.slice(0, el.selectionStart)).join(', ').length
-                  setField(i, { options: parseOptions(el.value) })
+                  // Al borrar todo el texto de una opción queda su hueco, para escribir ahí. Si la opción ya estaba
+                  // vacía (el borrado no cambiaría nada), el hueco se va.
+                  const deleting = (e.nativeEvent as InputEvent).inputType?.startsWith('delete')
+                  let { options, caret } = parseOptions(el.value, el.selectionStart, deleting)
+                  if (deleting && JSON.stringify(options) === JSON.stringify(f.options)) ({ options, caret } = parseOptions(el.value, el.selectionStart))
+                  setField(i, { options })
                   requestAnimationFrame(() => el.setSelectionRange(caret, caret))
                 }}
+                onKeyDown={(e) => {
+                  const el = e.currentTarget
+                  const at = el.selectionStart
+                  const back = e.key === 'Backspace'
+                  if ((!back && e.key !== 'Delete') || e.ctrlKey || e.altKey || e.metaKey || at !== el.selectionEnd) return
+                  const joined = joinOptions(el.value, at, back)
+                  if (!joined) return
+                  e.preventDefault()
+                  setField(i, { options: joined.options })
+                  requestAnimationFrame(() => el.setSelectionRange(joined.caret, joined.caret))
+                }}
+                onBlur={() => f.options.includes('') && setField(i, { options: f.options.filter((o) => o !== '') })}
               />
             ) : (
               <span className="tx-caption">{f.type === 'number' ? 'Solo acepta números' : 'Texto libre'}</span>

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Problem, type State } from './api'
-import { A, Dialog, FieldError, Filters, Ic, IncStage, IncidentId, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, can, count, fields, fmt, userName, type Run } from './ui'
+import { A, Dialog, FieldError, Filters, Ic, IncStage, IncidentId, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, can, count, fields, fmt, userName, usersWith, type Run } from './ui'
 
 export function Board({ state, run, open }: { state: State; run: Run; open: (id: number) => void }) {
   const { incidents, problems, suggestions } = state
@@ -226,7 +226,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
             value={p.ownerId}
             onChange={(e) => run(api.setOwner(p.id, Number(e.target.value)))}
           >
-            {users.map((u) => (
+            {usersWith(state, 'problemas', p.ownerId).map((u) => (
               <option key={u.id} value={u.id}>
                 Responsable: {u.name}
               </option>
