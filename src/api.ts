@@ -5,7 +5,19 @@ export type Status = 'identificado' | 'en_analisis' | 'error_conocido' | 'resuel
 export type Priority = 'alta' | 'media' | 'baja'
 export type Perm = 'panel' | 'crear' | 'resolver' | 'problemas' | 'config'
 // Respuestas del onboarding: cómo trabaja el cliente (ver Setup en el backend).
-export type Setup = { template: string; industry: string; services: string[]; team: boolean; sla: boolean; problems: boolean; fields: boolean }
+export type Setup = {
+  template: string
+  industry: string
+  services: string[]
+  team: boolean
+  sla: boolean
+  problems: boolean
+  fields: boolean
+  // Opcionales: si no vienen, quedan los de la plantilla. Un número vacío viaja como null y el backend lo rechaza con su mensaje.
+  responseHours?: Record<Priority, number | null> // solo se usan con sla
+  waitsRequester?: boolean // solo con sla: suma "Esperando al solicitante", que pausa el SLA de resolución
+  autoCloseDays?: number | null
+}
 
 export type Field = { key: string; label: string; type: 'text' | 'number' | 'select'; options: string[]; required: boolean }
 
@@ -106,19 +118,37 @@ export type State = {
 export type Template = { key: string; industry: string; config: Config }
 
 // La sesión es un token que se guarda en el navegador; si el storage no está disponible, dura lo que la pestaña.
+// Junto al token se recuerda el id de la cuenta (0 = todavía no se sabe), para que al salir con la sesión vencida, antes de
+// cargar la cuenta, se pueda borrar su borrador del onboarding. El login y el alta devuelven solo el token: el id se
+// guarda cuando llega el estado de la cuenta.
 let token = ''
+let account = 0
 try {
   token = localStorage.getItem('token') ?? ''
+  account = Number(localStorage.getItem('account')) || 0
 } catch {
   // sin storage
 }
 export const session = {
   active: () => token !== '',
+  account: () => account,
+  // Un token nuevo (entrar, crear una cuenta) o vacío (salir) olvida la cuenta anterior.
   set(t: string) {
     token = t
+    account = 0
     try {
       if (t) localStorage.setItem('token', t)
       else localStorage.removeItem('token')
+      localStorage.removeItem('account')
+    } catch {
+      // sin storage
+    }
+  },
+  setAccount(id: number) {
+    if (id === account) return
+    account = id
+    try {
+      localStorage.setItem('account', String(id))
     } catch {
       // sin storage
     }

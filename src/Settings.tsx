@@ -23,7 +23,7 @@ type Draft = Omit<Config, NumKeys> & {
   recurrenceDays: string
   autoCloseDays: string
 }
-// Lo que se envía. Un número vacío viaja como null: el backend lo rechaza con su mensaje (sin validación nueva en el front).
+// Lo que se envía (también desde el onboarding, que usa estos mismos ayudantes). Un número vacío viaja como null: el backend lo rechaza con su mensaje (sin validación nueva en el front).
 type Sent = Omit<Config, NumKeys> & {
   slaHours: Record<Priority, number | null>
   responseHours: Record<Priority, number | null>
@@ -31,7 +31,7 @@ type Sent = Omit<Config, NumKeys> & {
   recurrenceDays: number | null
   autoCloseDays: number | null
 }
-const hoursToDraft = (h: Record<Priority, number>) => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, String(v)])) as Draft['slaHours']
+export const hoursToDraft = (h: Record<Priority, number>) => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, String(v)])) as Draft['slaHours']
 const toDraft = (c: Config): Draft => {
   const d = clone(c)
   return {
@@ -43,8 +43,8 @@ const toDraft = (c: Config): Draft => {
     autoCloseDays: String(d.autoCloseDays),
   }
 }
-const num = (s: string) => (s.trim() === '' ? null : int(s))
-const hoursToSent = (h: Draft['slaHours']) => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, num(v)])) as Sent['slaHours']
+export const num = (s: string) => (s.trim() === '' ? null : int(s))
+export const hoursToSent = (h: Draft['slaHours']) => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, num(v)])) as Sent['slaHours']
 const toSent = (d: Draft): Sent => ({
   ...d,
   slaHours: hoursToSent(d.slaHours),
