@@ -3,8 +3,8 @@
 // mostrándole a la derecha cómo va quedando.
 import { useEffect, useState, type ReactNode } from 'react'
 import { api, type Priority, type Setup, type State, type Template } from './api'
-import { FieldError, Ic, Prio, count, fields, initials, type Run } from './ui'
-import { ListEditor, hoursToDraft, hoursToSent, num } from './Settings'
+import { FieldError, Ic, Prio, count, fields, hoursToDraft, hoursToSent, initials, num, type Run } from './ui'
+import { ListEditor } from './Settings'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
 
@@ -102,25 +102,27 @@ type Draft = {
   responseHours: Hours
   autoCloseDays: string
 }
-const draftKey = (accountId: number) => `onboarding:${accountId}`
-function readDraft(accountId: number): unknown {
+// Por cuenta y usuario: dos administradores de la misma cuenta en el mismo navegador no comparten borrador.
+const draftKey = (accountId: number, userId: number) => `onboarding:${accountId}:${userId}`
+function readDraft(accountId: number, userId: number): unknown {
   try {
-    return JSON.parse(localStorage.getItem(draftKey(accountId)) ?? 'null')
+    return JSON.parse(localStorage.getItem(draftKey(accountId, userId)) ?? 'null')
   } catch {
     return null
   }
 }
-function writeDraft(accountId: number, d: Draft) {
+function writeDraft(accountId: number, userId: number, d: Draft) {
   try {
-    localStorage.setItem(draftKey(accountId), JSON.stringify(d))
+    localStorage.setItem(draftKey(accountId, userId), JSON.stringify(d))
   } catch {
     // sin storage: no hay borrador
   }
 }
-// Al terminar el onboarding y al cerrar sesión.
-export function clearOnboardingDraft(accountId: number) {
+// Al terminar el onboarding, al salir y cuando llega el estado de una cuenta ya configurada (por ejemplo, si el
+// onboarding se terminó en otro dispositivo o pestaña).
+export function clearOnboardingDraft(accountId: number, userId: number) {
   try {
-    localStorage.removeItem(draftKey(accountId))
+    localStorage.removeItem(draftKey(accountId, userId))
   } catch {
     // sin storage: no hay borrador
   }
@@ -180,7 +182,7 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
   const [busy, setBusy] = useState(false)
   // El borrador se lee una vez, al entrar, y se empieza a guardar recién después de intentar recuperarlo
   // (hace falta la lista de plantillas para validarlo): así no se pisa antes de tiempo.
-  const [saved] = useState(() => readDraft(state.id))
+  const [saved] = useState(() => readDraft(state.id, state.me))
   const [restored, setRestored] = useState(false)
 
   useEffect(() => {
@@ -204,8 +206,8 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
   }, [])
 
   useEffect(() => {
-    if (restored) writeDraft(state.id, { step, key, industry, services, ans, waits, responseHours, autoCloseDays })
-  }, [restored, state.id, step, key, industry, services, ans, waits, responseHours, autoCloseDays])
+    if (restored) writeDraft(state.id, state.me, { step, key, industry, services, ans, waits, responseHours, autoCloseDays })
+  }, [restored, state.id, state.me, step, key, industry, services, ans, waits, responseHours, autoCloseDays])
 
   const tpl = templates.find((t) => t.key === key)
   const steps = stepsFor(ans)
@@ -255,7 +257,7 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
   }
   const finish = async (createdTicket: boolean) => {
     if (await call(api.finishOnboarding())) {
-      clearOnboardingDraft(state.id)
+      clearOnboardingDraft(state.id, state.me)
       onDone(createdTicket)
     }
   }
@@ -310,13 +312,14 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                       className="onb-pick tx-solid"
                       aria-pressed={t.key === key}
                       onClick={() => {
-                        // Los plazos se precargan al cambiar de rubro; volver a elegir el mismo no pisa lo que se escribió en "Plazos".
+                        // Cambiar de rubro recarga desde su plantilla los servicios y los plazos; volver a elegir el mismo no
+                        // pisa lo que se editó (por ejemplo, lo recuperado de un borrador).
                         if (t.key !== key) {
+                          setServices(t.config.services)
                           setResponseHours(hoursToDraft(t.config.responseHours))
                           setAutoCloseDays(String(t.config.autoCloseDays))
                         }
                         setKey(t.key)
-                        setServices(t.config.services)
                       }}
                     >
                       <span className="tx-h3">{t.industry}</span>
@@ -398,7 +401,9 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                       <span className="tx-caption" aria-hidden="true">
                         Primera respuesta
                       </span>
-                      <span className="tx-caption">Resolución</span>
+                      <span className="tx-caption" aria-hidden="true">
+                        Resolución
+                      </span>
                       {PRIOS.map((p) => (
                         <div key={p} style={{ display: 'contents' }}>
                           <span className="cfg-prio">
@@ -415,7 +420,13 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                             />
                             <span className="tx-muted">horas</span>
                           </span>
-                          <span className="cfg-hours tx-muted">{count(tpl.config.slaHours[p], 'hora')}</span>
+                          {/* Los encabezados están ocultos para lectores de pantalla (como en Configuración): el texto se lee completo. */}
+                          <span className="cfg-hours tx-muted">
+                            <span>
+                              <span className="sr-only">{`Resolución de prioridad ${p}: `}</span>
+                              {count(tpl.config.slaHours[p], 'hora')}
+                            </span>
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -675,7 +686,10 @@ function Preview(props: {
   const waiting = !!(ans.sla && props.waits)
   if (states && waiting && !states.includes(WAITING)) states = [...states.slice(0, -1), WAITING, states[states.length - 1]]
   // Las horas se muestran como se van a guardar; vacías, con una raya.
-  const hours = (v: string) => (num(v) === null ? '—' : `${num(v)} h`)
+  const hours = (v: string) => {
+    const n = num(v)
+    return n === null ? '—' : `${n} h`
+  }
   const menu = ['Panel', 'Incidentes', ...(ans.problems ? ['Problemas', 'Errores conocidos'] : []), 'Configuración']
 
   return (

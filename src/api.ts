@@ -118,37 +118,43 @@ export type State = {
 export type Template = { key: string; industry: string; config: Config }
 
 // La sesión es un token que se guarda en el navegador; si el storage no está disponible, dura lo que la pestaña.
-// Junto al token se recuerda el id de la cuenta (0 = todavía no se sabe), para que al salir con la sesión vencida, antes de
-// cargar la cuenta, se pueda borrar su borrador del onboarding. El login y el alta devuelven solo el token: el id se
-// guarda cuando llega el estado de la cuenta.
+// Junto al token se recuerdan la cuenta y el usuario (0 = todavía no se sabe), para que al salir con la sesión vencida,
+// antes de cargar la cuenta, se pueda borrar el borrador del onboarding de ese usuario. El login y el alta devuelven solo
+// el token: los ids se guardan cuando llega el estado de la cuenta.
 let token = ''
 let account = 0
+let user = 0
 try {
   token = localStorage.getItem('token') ?? ''
   account = Number(localStorage.getItem('account')) || 0
+  user = Number(localStorage.getItem('user')) || 0
 } catch {
   // sin storage
 }
 export const session = {
   active: () => token !== '',
-  account: () => account,
-  // Un token nuevo (entrar, crear una cuenta) o vacío (salir) olvida la cuenta anterior.
+  who: () => ({ account, user }),
+  // Un token nuevo (entrar, crear una cuenta) o vacío (salir) olvida la cuenta y el usuario anteriores.
   set(t: string) {
     token = t
     account = 0
+    user = 0
     try {
       if (t) localStorage.setItem('token', t)
       else localStorage.removeItem('token')
       localStorage.removeItem('account')
+      localStorage.removeItem('user')
     } catch {
       // sin storage
     }
   },
-  setAccount(id: number) {
-    if (id === account) return
-    account = id
+  setWho(accountId: number, userId: number) {
+    if (accountId === account && userId === user) return
+    account = accountId
+    user = userId
     try {
-      localStorage.setItem('account', String(id))
+      localStorage.setItem('account', String(accountId))
+      localStorage.setItem('user', String(userId))
     } catch {
       // sin storage
     }

@@ -61,11 +61,11 @@ export default function App() {
     }
   }, [theme])
 
-  // Al salir (cierre de sesión o sesión vencida) se borra el borrador del onboarding de la cuenta: la cargada o, si
-  // todavía no se cargó (por ejemplo, al recargar con la sesión vencida), la que se recordó junto al token.
+  // Al salir (cierre de sesión o sesión vencida) se borra el borrador del onboarding de este usuario en esta cuenta: la
+  // cargada o, si todavía no se cargó (por ejemplo, al recargar con la sesión vencida), la que se recordó junto al token.
   const leave = () => {
-    const account = state?.id ?? session.account()
-    if (account) clearOnboardingDraft(account)
+    const { account, user } = state ? { account: state.id, user: state.me } : session.who()
+    if (account && user) clearOnboardingDraft(account, user)
     session.set('')
     setLogged(false)
     setState(null)
@@ -83,7 +83,9 @@ export default function App() {
   const run: Run = async (p, opts) => {
     try {
       const s = await p
-      session.setAccount(s.id)
+      session.setWho(s.id, s.me)
+      // Cuenta ya configurada: si quedó un borrador (por ejemplo, terminó el onboarding en otro dispositivo), se borra.
+      if (s.onboarded) clearOnboardingDraft(s.id, s.me)
       setState(s)
       setError(null)
       return s
