@@ -147,6 +147,13 @@ export function ago(s: string) {
 
 export const count = (k: number, one: string, many = one + 's') => `${k} ${k === 1 ? one : many}`
 
+// Números editables (Configuración y onboarding): el input guarda el texto, para mostrar exactamente lo que se escribe
+// (también vacío). Un número vacío viaja como null: el backend lo rechaza con su mensaje (sin validación nueva en el front).
+const int = (s: string) => Math.max(0, Math.floor(Number(s)) || 0)
+export const num = (s: string) => (s.trim() === '' ? null : int(s))
+export const hoursToDraft = (h: Record<Priority, number>) => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, String(v)])) as Record<Priority, string>
+export const hoursToSent = (h: Record<Priority, string>) => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, num(v)])) as Record<Priority, number | null>
+
 // --- Incidentes: etapa ITIL, estado configurable, SLA, personas ---
 
 // Etapas del ciclo de vida (ITIL 4). No son estados del flujo configurable: salen de resolvedAt y closedAt.

@@ -7,6 +7,9 @@ html, body, #root { height: 100%; }
 .tx-dialog::backdrop { background: var(--scrim); }
 .tx-dialog .tx-modal { max-height: calc(100vh - 48px); overflow-y: auto; }
 
+/* Texto solo para lectores de pantalla: oculto a la vista, pero se lee. */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
 /* Checkbox nativo oculto dentro de .tx-check: el foco se muestra en la caja. */
 .tx-check input { position: absolute; opacity: 0; }
 .tx-check:focus-within .box { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -90,6 +93,10 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 .auth .tx-modal { width: min(420px, 100%); }
 .onb { max-width: 1180px; margin: 0 auto; padding: 28px 24px 56px; display: flex; flex-direction: column; gap: 24px; }
 .onb-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+/* Cerrar sesión: a la derecha de los pasos; cuando el encabezado no entra en una línea (ver 1100 px), a la derecha
+   de la marca y los pasos debajo, en su propia fila. */
+.onb-out { order: 3; flex: none; }
+.onb-head .onb-steps { margin-left: auto; } /* pasos y cerrar sesión, juntos a la derecha */
 .onb-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
 .onb-steps li { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 4px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 500; color: var(--ink-subtle); }
 .onb-steps li span { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; background: var(--surface-solid); border: 1.5px dashed var(--hairline-strong); }
@@ -120,6 +127,8 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 .onb-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .onb-form { padding: 14px; display: flex; flex-direction: column; gap: 12px; border-radius: var(--radius-md); }
 .onb-form > div { display: flex; flex-direction: column; gap: 6px; }
+/* Vista previa: primera respuesta y resolución por prioridad */
+.onb-sla { display: grid; grid-template-columns: max-content repeat(2, minmax(0, 1fr)); gap: 6px 10px; align-items: center; }
 .onb-new { animation: onb-in var(--tx-base) var(--tx-ease); }
 @keyframes onb-in { from { opacity: 0; transform: translateY(4px); } }
 
@@ -193,6 +202,8 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
   .viz-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .onb-layout { grid-template-columns: 1fr; }
   .onb-preview { position: static; }
+  .onb-out { order: 0; margin-left: auto; }
+  .onb-steps { order: 1; flex-basis: 100%; }
 }
 @media (max-width: 640px) {
   .cfg-field { grid-template-columns: 1fr 1fr; }

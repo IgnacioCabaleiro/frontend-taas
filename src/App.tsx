@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, session, type Perm, type State } from './api'
 import { A, Ic, can, initials, type Run } from './ui'
 import { Auth } from './Auth'
-import { Onboarding } from './Onboarding'
+import { Onboarding, clearOnboardingDraft } from './Onboarding'
 import { Dashboard } from './Dashboard'
 import { Board, NewProblemModal, ProblemDetail } from './Problems'
 import { Incidents } from './Incidents'
@@ -61,18 +61,31 @@ export default function App() {
     }
   }, [theme])
 
+  // Al salir (cierre de sesión o sesión vencida) se borra el borrador del onboarding de este usuario en esta cuenta: la
+  // cargada o, si todavía no se cargó (por ejemplo, al recargar con la sesión vencida), la que se recordó junto al token.
   const leave = () => {
+    const { account, user } = state ? { account: state.id, user: state.me } : session.who()
+    if (account && user) clearOnboardingDraft(account, user)
     session.set('')
     setLogged(false)
     setState(null)
     setError(null)
+    // Quien entre después en la misma pestaña arranca en el Panel (o, si su rol no lo ve, en su primera sección).
+    setTab('panel')
     setOpenId(0)
     setRelated(0)
     setModal(false)
   }
+  const logout = () => {
+    api.logout().catch(() => {})
+    leave()
+  }
   const run: Run = async (p, opts) => {
     try {
       const s = await p
+      session.setWho(s.id, s.me)
+      // Cuenta ya configurada: si quedó un borrador (por ejemplo, terminó el onboarding en otro dispositivo), se borra.
+      if (s.onboarded) clearOnboardingDraft(s.id, s.me)
       setState(s)
       setError(null)
       return s
@@ -91,7 +104,7 @@ export default function App() {
 
   if (!logged) return <Auth onEnter={() => setLogged(true)} />
   if (state && !state.onboarded && can(state, 'config'))
-    return <Onboarding state={state} run={run} onDone={(createdTicket) => setTab(createdTicket ? 'incidentes' : 'panel')} />
+    return <Onboarding state={state} run={run} onDone={(createdTicket) => setTab(createdTicket ? 'incidentes' : 'panel')} onLogout={logout} />
 
   const tabs = state ? allowedTabs(state) : []
   const current = !state || tabs.includes(tab) ? tab : (tabs[0] ?? 'incidentes')
@@ -151,14 +164,7 @@ export default function App() {
             >
               <Ic n={theme === 'dark' ? 'sun' : 'moon'} />
             </button>
-            <button
-              className="tx-btn ghost icon sm"
-              aria-label="Cerrar sesión"
-              onClick={() => {
-                api.logout().catch(() => {})
-                leave()
-              }}
-            >
+            <button className="tx-btn ghost icon sm" aria-label="Cerrar sesión" onClick={logout}>
               <Ic n="logout" />
             </button>
           </div>

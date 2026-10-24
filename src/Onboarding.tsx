@@ -3,17 +3,30 @@
 // mostrándole a la derecha cómo va quedando.
 import { useEffect, useState, type ReactNode } from 'react'
 import { api, type Priority, type Setup, type State, type Template } from './api'
-import { FieldError, Ic, Prio, fields, initials, type Run } from './ui'
+import { FieldError, Ic, Prio, count, fields, hoursToDraft, hoursToSent, initials, num, type Run } from './ui'
 import { ListEditor } from './Settings'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
 
 type Answers = Record<'team' | 'sla' | 'problems' | 'fields', boolean | null>
-type StepKey = 'rubro' | 'servicios' | 'trabajo' | 'equipo' | 'ticket'
-const STEP_NAME: Record<StepKey, string> = { rubro: 'Tu empresa', servicios: 'Qué atendés', trabajo: 'Cómo trabajan', equipo: 'Tu equipo', ticket: 'Primer ticket' }
+type StepKey = 'rubro' | 'servicios' | 'trabajo' | 'plazos' | 'equipo' | 'ticket'
+const STEP_NAME: Record<StepKey, string> = {
+  rubro: 'Tu empresa',
+  servicios: 'Qué atendés',
+  trabajo: 'Cómo trabajan',
+  plazos: 'Plazos',
+  equipo: 'Tu equipo',
+  ticket: 'Primer ticket',
+}
+// Las horas y los días guardan el texto del input, como en Configuración: se ve exactamente lo escrito (también vacío).
+type Hours = Record<Priority, string>
+
+// El estado que el backend suma al flujo si hay que esperar a quien reportó (WaitingRequester): pausa el SLA de resolución.
+const WAITING = 'Esperando al solicitante'
 
 // Cada pregunta enciende o apaga una parte de la ticketera. `then` le cuenta al cliente qué significa su respuesta.
-const QUESTIONS: { key: keyof Answers; q: string; no: string; yes: string; then: [string, string] }[] = [
+type Question = { q: string; no: string; yes: string; then: [string, string] }
+const QUESTIONS: (Question & { key: keyof Answers })[] = [
   {
     key: 'team',
     q: '¿Quién atiende los pedidos?',
@@ -43,24 +56,161 @@ const QUESTIONS: { key: keyof Answers; q: string; no: string; yes: string; then:
     then: ['El ticket pide solo título, servicio y prioridad.', 'Sumamos campos propios de tu rubro. Después podés cambiarlos.'],
   },
 ]
+// Del paso "Plazos", solo si tiene plazos que cumplir.
+const WAITS_QUESTION: Question = {
+  q: '¿A veces tenés que esperar datos o una confirmación de quien reportó?',
+  no: 'Casi nunca',
+  yes: 'Sí, a veces',
+  then: ['Los tickets avanzan sin esperas: el plazo corre siempre.', "Sumamos el estado 'Esperando al solicitante': mientras está ahí, el plazo de resolución se detiene."],
+}
 
-export function Onboarding({ state, run, onDone }: { state: State; run: Run; onDone: (createdTicket: boolean) => void }) {
+function YesNo({ q, no, yes, then, value, onChange }: Question & { value: boolean | null; onChange: (v: boolean) => void }) {
+  return (
+    <fieldset className="onb-q">
+      <legend className="tx-h3">{q}</legend>
+      <div className="onb-picks two">
+        {[false, true].map((v) => (
+          <button key={String(v)} type="button" className="onb-pick tx-solid" aria-pressed={value === v} onClick={() => onChange(v)}>
+            <span className="tx-strong">{v ? yes : no}</span>
+          </button>
+        ))}
+      </div>
+      {value !== null && (
+        <p className="tx-caption onb-then">
+          <Ic n="check" />
+          {then[value ? 1 : 0]}
+        </p>
+      )}
+    </fieldset>
+  )
+}
+
+const STEPS_TEAM: StepKey[] = ['rubro', 'servicios', 'trabajo', 'plazos', 'equipo', 'ticket']
+// Sin equipo no hay paso "Tu equipo".
+const stepsFor = (ans: Answers) => STEPS_TEAM.filter((s) => s !== 'equipo' || ans.team !== false)
+
+// Borrador del onboarding en el navegador, por cuenta: si recarga en el medio, retoma donde estaba. No guarda nada de
+// "Tu equipo" (las personas ya quedan en el backend) ni del formulario de "Primer ticket": de esos pasos, solo el paso.
+// Sin storage (por ejemplo, en modo privado), el onboarding funciona igual, sin borrador.
+type Draft = {
+  step: StepKey
+  key: string
+  industry: string
+  services: string[]
+  ans: Answers
+  waits: boolean | null
+  responseHours: Hours
+  autoCloseDays: string
+}
+// Por cuenta y usuario: dos administradores de la misma cuenta en el mismo navegador no comparten borrador.
+const draftKey = (accountId: number, userId: number) => `onboarding:${accountId}:${userId}`
+function readDraft(accountId: number, userId: number): unknown {
+  try {
+    return JSON.parse(localStorage.getItem(draftKey(accountId, userId)) ?? 'null')
+  } catch {
+    return null
+  }
+}
+function writeDraft(accountId: number, userId: number, d: Draft) {
+  try {
+    localStorage.setItem(draftKey(accountId, userId), JSON.stringify(d))
+  } catch {
+    // sin storage: no hay borrador
+  }
+}
+// Al terminar el onboarding, al salir y cuando llega el estado de una cuenta ya configurada (por ejemplo, si el
+// onboarding se terminó en otro dispositivo o pestaña).
+export function clearOnboardingDraft(accountId: number, userId: number) {
+  try {
+    localStorage.removeItem(draftKey(accountId, userId))
+  } catch {
+    // sin storage: no hay borrador
+  }
+}
+const isBool = (v: unknown) => v === null || typeof v === 'boolean'
+const isStr = (v: unknown): v is string => typeof v === 'string'
+// El borrador se recupera solo si cierra: la forma es la esperada, el rubro existe y al paso guardado se puede llegar
+// con esas respuestas (las mismas condiciones que piden los botones de "Continuar"). Después de "Plazos" la cuenta ya
+// tiene que estar configurada en el backend. Si algo no cierra, el onboarding arranca de cero, en el primer paso.
+function restorable(d: unknown, templates: Template[], state: State): d is Draft {
+  if (!d || typeof d !== 'object') return false
+  const x = d as Partial<Record<keyof Draft, unknown>>
+  const ans = x.ans as Partial<Answers> | undefined
+  const hours = x.responseHours as Partial<Hours> | undefined
+  const shapeOk =
+    isStr(x.step) &&
+    isStr(x.key) &&
+    isStr(x.industry) &&
+    Array.isArray(x.services) &&
+    x.services.every(isStr) &&
+    !!ans &&
+    typeof ans === 'object' &&
+    (['team', 'sla', 'problems', 'fields'] as const).every((k) => k in ans && isBool(ans[k])) &&
+    isBool(x.waits) &&
+    !!hours &&
+    typeof hours === 'object' &&
+    PRIOS.every((p) => isStr(hours[p])) &&
+    isStr(x.autoCloseDays)
+  if (!shapeOk) return false
+  const v = d as Draft
+  if (!templates.some((t) => t.key === v.key)) return false
+  const steps = stepsFor(v.ans)
+  const at = steps.indexOf(v.step)
+  if (at < 0) return false
+  const past = (s: StepKey) => at > steps.indexOf(s)
+  if (past('rubro') && v.key === 'otro' && !v.industry.trim()) return false
+  if (past('servicios') && !v.services.some((s) => s.trim())) return false
+  if (past('trabajo') && Object.values(v.ans).some((a) => a === null)) return false
+  if (past('plazos') && ((v.ans.sla && v.waits === null) || !state.industry)) return false
+  return true
+}
+
+export function Onboarding(props: { state: State; run: Run; onDone: (createdTicket: boolean) => void; onLogout: () => void }) {
+  const { state, run, onDone } = props
   const [templates, setTemplates] = useState<Template[]>([])
   const [step, setStep] = useState<StepKey>('rubro')
   const [key, setKey] = useState('')
   const [industry, setIndustry] = useState('')
   const [services, setServices] = useState<string[]>([])
   const [ans, setAns] = useState<Answers>({ team: null, sla: null, problems: null, fields: null })
+  // Paso "Plazos": se precarga con la plantilla del rubro elegido.
+  const [waits, setWaits] = useState<boolean | null>(null)
+  const [responseHours, setResponseHours] = useState<Hours>({ alta: '', media: '', baja: '' })
+  const [autoCloseDays, setAutoCloseDays] = useState('')
   const [prio, setPrio] = useState<Priority>('media')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // El borrador se lee una vez, al entrar, y se empieza a guardar recién después de intentar recuperarlo
+  // (hace falta la lista de plantillas para validarlo): así no se pisa antes de tiempo.
+  const [saved] = useState(() => readDraft(state.id, state.me))
+  const [restored, setRestored] = useState(false)
 
   useEffect(() => {
-    api.templates().then(setTemplates, (e: Error) => setError(e.message))
+    api.templates().then(
+      (ts) => {
+        setTemplates(ts)
+        if (restorable(saved, ts, state)) {
+          setKey(saved.key)
+          setIndustry(saved.industry)
+          setServices(saved.services)
+          setAns(saved.ans)
+          setWaits(saved.waits)
+          setResponseHours(saved.responseHours)
+          setAutoCloseDays(saved.autoCloseDays)
+          setStep(saved.step)
+        }
+        setRestored(true)
+      },
+      (e: Error) => setError(e.message),
+    )
   }, [])
 
+  useEffect(() => {
+    if (restored) writeDraft(state.id, state.me, { step, key, industry, services, ans, waits, responseHours, autoCloseDays })
+  }, [restored, state.id, state.me, step, key, industry, services, ans, waits, responseHours, autoCloseDays])
+
   const tpl = templates.find((t) => t.key === key)
-  const steps: StepKey[] = ans.team === false ? ['rubro', 'servicios', 'trabajo', 'ticket'] : ['rubro', 'servicios', 'trabajo', 'equipo', 'ticket']
+  const steps = stepsFor(ans)
   const at = steps.indexOf(step)
   const answered = Object.values(ans).every((v) => v !== null)
   const cleanServices = services.map((s) => s.trim()).filter(Boolean)
@@ -71,6 +221,8 @@ export function Onboarding({ state, run, onDone }: { state: State; run: Run; onD
     setError('')
     setStep(to)
   }
+  // El error del paso se va apenas se cambia un campo o una respuesta (los inputs lo hacen con onInput, en la sección).
+  const edited = () => setError('')
   // Toda llamada del asistente pasa por acá: muestra el error en el paso, no en un banner perdido.
   const call = async (p: Promise<State>) => {
     setBusy(true)
@@ -80,18 +232,34 @@ export function Onboarding({ state, run, onDone }: { state: State; run: Run; onD
       await run(Promise.resolve(s))
       return s
     } catch (e) {
-      setError((e as Error).message)
+      // Sesión vencida: como en el resto de la app (run sale al ingreso y borra el borrador). Lo demás, en el paso.
+      if ('expired' in (e as object)) await run(Promise.reject(e))
+      else setError((e as Error).message)
       return null
     } finally {
       setBusy(false)
     }
   }
   const saveSetup = async () => {
-    const setup: Setup = { template: key, industry, services: cleanServices, team: !!ans.team, sla: !!ans.sla, problems: !!ans.problems, fields: !!ans.fields }
+    const setup: Setup = {
+      template: key,
+      industry,
+      services: cleanServices,
+      team: !!ans.team,
+      sla: !!ans.sla,
+      problems: !!ans.problems,
+      fields: !!ans.fields,
+      // Las horas de primera respuesta y la espera solo cuentan con plazos; el cierre automático, siempre.
+      ...(ans.sla && { responseHours: hoursToSent(responseHours), waitsRequester: !!waits }),
+      autoCloseDays: num(autoCloseDays),
+    }
     if (await call(api.onboard(setup))) go(steps[at + 1])
   }
   const finish = async (createdTicket: boolean) => {
-    if (await call(api.finishOnboarding())) onDone(createdTicket)
+    if (await call(api.finishOnboarding())) {
+      clearOnboardingDraft(state.id, state.me)
+      onDone(createdTicket)
+    }
   }
 
   const nav = (next: ReactNode) => (
@@ -115,6 +283,9 @@ export function Onboarding({ state, run, onDone }: { state: State; run: Run; onD
             <b>TaaS</b>
             <span>· {state.name}</span>
           </div>
+          <button type="button" className="tx-btn ghost icon sm onb-out" aria-label="Cerrar sesión" onClick={props.onLogout}>
+            <Ic n="logout" />
+          </button>
           <ol className="onb-steps" aria-label="Pasos del alta">
             {steps.map((s, i) => (
               <li key={s} className={i < at ? 'done' : i === at ? 'current' : ''} aria-current={i === at ? 'step' : undefined}>
@@ -126,7 +297,7 @@ export function Onboarding({ state, run, onDone }: { state: State; run: Run; onD
         </header>
 
         <div className="onb-layout">
-          <section className="tx-panel tx-solid onb-step" aria-live="polite">
+          <section className="tx-panel tx-solid onb-step" aria-live="polite" onInput={edited}>
             {step === 'rubro' && (
               <>
                 <div>
@@ -141,8 +312,14 @@ export function Onboarding({ state, run, onDone }: { state: State; run: Run; onD
                       className="onb-pick tx-solid"
                       aria-pressed={t.key === key}
                       onClick={() => {
+                        // Cambiar de rubro recarga desde su plantilla los servicios y los plazos; volver a elegir el mismo no
+                        // pisa lo que se editó (por ejemplo, lo recuperado de un borrador).
+                        if (t.key !== key) {
+                          setServices(t.config.services)
+                          setResponseHours(hoursToDraft(t.config.responseHours))
+                          setAutoCloseDays(String(t.config.autoCloseDays))
+                        }
                         setKey(t.key)
-                        setServices(t.config.services)
                       }}
                     >
                       <span className="tx-h3">{t.industry}</span>
@@ -190,27 +367,104 @@ export function Onboarding({ state, run, onDone }: { state: State; run: Run; onD
                   <h1 className="tx-h1">Contanos cómo trabajan hoy</h1>
                   <p className="tx-muted">Cuatro preguntas. Con tus respuestas activamos solo lo que vas a usar, para que la ticketera no te quede grande ni chica.</p>
                 </div>
-                {QUESTIONS.map(({ key: k, q, no, yes, then }) => (
-                  <fieldset key={k} className="onb-q">
-                    <legend className="tx-h3">{q}</legend>
-                    <div className="onb-picks two">
-                      {[false, true].map((v) => (
-                        <button key={String(v)} type="button" className="onb-pick tx-solid" aria-pressed={ans[k] === v} onClick={() => setAns((a) => ({ ...a, [k]: v }))}>
-                          <span className="tx-strong">{v ? yes : no}</span>
-                        </button>
+                {QUESTIONS.map(({ key: k, ...question }) => (
+                  <YesNo key={k} {...question} value={ans[k]} onChange={(v) => setAns((a) => ({ ...a, [k]: v }))} />
+                ))}
+                {nav(
+                  <button type="button" className="tx-btn primary lg" disabled={!answered} onClick={() => go('plazos')}>
+                    Continuar
+                  </button>,
+                )}
+              </>
+            )}
+
+            {step === 'plazos' && tpl && (
+              <>
+                <div>
+                  <h1 className="tx-h1">Plazos de atención</h1>
+                  <p className="tx-muted">
+                    {ans.sla
+                      ? 'Te proponemos los plazos habituales de tu rubro. Ajustalos a lo que hoy le prometés a quien reporta; después los podés cambiar desde Configuración.'
+                      : 'Falta un detalle: qué pasa con los tickets que ya resolviste. Después lo podés cambiar desde Configuración.'}
+                  </p>
+                </div>
+                {ans.sla && (
+                  <div className="tx-stack" style={{ gap: 12 }}>
+                    <div>
+                      <h2 className="tx-h3">Horas de primera respuesta</h2>
+                      <p className="tx-caption">
+                        Cuánto puede esperar quien reportó hasta recibir la primera respuesta, según la prioridad. Al lado, como referencia, las horas para resolver.
+                      </p>
+                    </div>
+                    <div className="cfg-sla">
+                      <span />
+                      <span className="tx-caption" aria-hidden="true">
+                        Primera respuesta
+                      </span>
+                      <span className="tx-caption" aria-hidden="true">
+                        Resolución
+                      </span>
+                      {PRIOS.map((p) => (
+                        <div key={p} style={{ display: 'contents' }}>
+                          <span className="cfg-prio">
+                            <Prio p={p} />
+                          </span>
+                          <span className="cfg-hours">
+                            <input
+                              className="tx-input cfg-num"
+                              type="number"
+                              min={1}
+                              aria-label={`Horas de primera respuesta para prioridad ${p}`}
+                              value={responseHours[p]}
+                              onChange={(e) => setResponseHours((h) => ({ ...h, [p]: e.target.value }))}
+                            />
+                            <span className="tx-muted">horas</span>
+                          </span>
+                          {/* Los encabezados están ocultos para lectores de pantalla (como en Configuración): el texto se lee completo. */}
+                          <span className="cfg-hours tx-muted">
+                            <span>
+                              <span className="sr-only">{`Resolución de prioridad ${p}: `}</span>
+                              {count(tpl.config.slaHours[p], 'hora')}
+                            </span>
+                          </span>
+                        </div>
                       ))}
                     </div>
-                    {ans[k] !== null && (
-                      <p className="tx-caption onb-then">
-                        <Ic n="check" />
-                        {then[ans[k] ? 1 : 0]}
-                      </p>
-                    )}
-                  </fieldset>
-                ))}
+                  </div>
+                )}
+                {ans.sla && (
+                  <YesNo
+                    {...WAITS_QUESTION}
+                    value={waits}
+                    onChange={(v) => {
+                      setWaits(v)
+                      edited()
+                    }}
+                  />
+                )}
+                <div className="tx-stack" style={{ gap: 12 }}>
+                  <div>
+                    <h2 className="tx-h3">Cierre automático</h2>
+                    <p className="tx-caption">
+                      Un incidente resuelto espera la confirmación de que el servicio quedó restablecido. Si nadie lo cierra ni lo reabre, se cierra solo.
+                    </p>
+                  </div>
+                  <div className="cfg-line" style={{ flexWrap: 'wrap' }}>
+                    Los incidentes resueltos se cierran solos tras
+                    <input
+                      className="tx-input cfg-num"
+                      type="number"
+                      min={1}
+                      aria-label="Días sin actividad para el cierre automático"
+                      value={autoCloseDays}
+                      onChange={(e) => setAutoCloseDays(e.target.value)}
+                    />
+                    días sin actividad.
+                  </div>
+                </div>
                 {error && <FieldError id="ob-e">{error}</FieldError>}
                 {nav(
-                  <button type="button" className="tx-btn primary lg" disabled={!answered || busy} onClick={saveSetup}>
+                  <button type="button" className="tx-btn primary lg" disabled={busy || (!!ans.sla && waits === null)} onClick={saveSetup}>
                     Armar mi ticketera
                   </button>,
                 )}
@@ -343,7 +597,15 @@ export function Onboarding({ state, run, onDone }: { state: State; run: Run; onD
                     <span className="tx-label">Prioridad</span>
                     <div className="tx-seg" role="group" aria-label="Prioridad">
                       {PRIOS.map((p) => (
-                        <button key={p} type="button" aria-pressed={p === prio} onClick={() => setPrio(p)}>
+                        <button
+                          key={p}
+                          type="button"
+                          aria-pressed={p === prio}
+                          onClick={() => {
+                            setPrio(p)
+                            edited()
+                          }}
+                        >
                           <span className={`tx-prio ${p}`} style={{ padding: 0, background: 'none', height: 'auto' }} />
                           {p[0].toUpperCase() + p.slice(1)}
                         </button>
@@ -385,7 +647,17 @@ export function Onboarding({ state, run, onDone }: { state: State; run: Run; onD
             )}
           </section>
 
-          <Preview state={state} tpl={tpl} industry={key === 'otro' ? industry : (tpl?.industry ?? '')} services={cleanServices} ans={ans} team={team.map((u) => u.name)} />
+          <Preview
+            state={state}
+            tpl={tpl}
+            industry={key === 'otro' ? industry : (tpl?.industry ?? '')}
+            services={cleanServices}
+            ans={ans}
+            waits={waits}
+            responseHours={responseHours}
+            autoCloseDays={autoCloseDays}
+            team={team.map((u) => u.name)}
+          />
         </div>
       </main>
     </div>
@@ -395,11 +667,29 @@ export function Onboarding({ state, run, onDone }: { state: State; run: Run; onD
 const Sk = ({ w, h = 12 }: { w: number | string; h?: number }) => <span className="sk" style={{ width: w, height: h }} />
 
 // Vista previa: la ticketera que se va armando con cada respuesta. Lo que todavía no se decidió se ve como skeleton.
-function Preview(props: { state: State; tpl?: Template; industry: string; services: string[]; ans: Answers; team: string[] }) {
+function Preview(props: {
+  state: State
+  tpl?: Template
+  industry: string
+  services: string[]
+  ans: Answers
+  waits: boolean | null
+  responseHours: Hours
+  autoCloseDays: string
+  team: string[]
+}) {
   const { tpl, ans, services } = props
   const c = tpl?.config
-  // Misma regla que el backend (seed.go, template.build).
-  const states = c && ans.team !== null ? (ans.team ? c.states : [c.states[0], c.states[c.states.length - 1]]) : null
+  // Misma regla que el backend (setup.go, Template.build): sin equipo quedan el primero y el último; si hay plazos y se
+  // espera a quien reportó, "Esperando al solicitante" va justo antes del último (si el flujo ya lo trae, queda donde está).
+  let states = c && ans.team !== null ? (ans.team ? c.states : [c.states[0], c.states[c.states.length - 1]]) : null
+  const waiting = !!(ans.sla && props.waits)
+  if (states && waiting && !states.includes(WAITING)) states = [...states.slice(0, -1), WAITING, states[states.length - 1]]
+  // Las horas se muestran como se van a guardar; vacías, con una raya.
+  const hours = (v: string) => {
+    const n = num(v)
+    return n === null ? '—' : `${n} h`
+  }
   const menu = ['Panel', 'Incidentes', ...(ans.problems ? ['Problemas', 'Errores conocidos'] : []), 'Configuración']
 
   return (
@@ -448,14 +738,26 @@ function Preview(props: { state: State; tpl?: Template; industry: string; servic
           </div>
           <div>
             <div className="tx-caption">Prioridad{ans.sla && c && ' y vencimiento'}</div>
-            <div className="onb-chips">
-              {PRIOS.map((p) => (
-                <span key={p} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                  <Prio p={p} />
-                  {ans.sla && c && <span className="tx-caption">{c.slaHours[p]} h</span>}
-                </span>
-              ))}
-            </div>
+            {ans.sla && c ? (
+              <div className="onb-sla">
+                <span />
+                <span className="tx-caption">Primera respuesta</span>
+                <span className="tx-caption">Resolución</span>
+                {PRIOS.map((p) => (
+                  <div key={p} style={{ display: 'contents' }}>
+                    <Prio p={p} />
+                    <span className="tx-caption">{hours(props.responseHours[p])}</span>
+                    <span className="tx-caption">{c.slaHours[p]} h</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="onb-chips">
+                {PRIOS.map((p) => (
+                  <Prio key={p} p={p} />
+                ))}
+              </div>
+            )}
           </div>
           {ans.fields === null ? (
             <Sk w="55%" />
@@ -475,10 +777,13 @@ function Preview(props: { state: State; tpl?: Template; industry: string; servic
         <span className="tx-overline">Recorrido de un ticket</span>
         <div className="onb-chips">
           {states ? (
-            states.map((s, i) => (
+            states.map((s, i, all) => (
               <span key={s} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                 {i > 0 && <Ic n="chevron" />}
-                <span className={`tx-badge ${i === states.length - 1 ? 'resuelto' : 'abierto'}`}>{s}</span>
+                <span className={`tx-badge ${i === all.length - 1 ? 'resuelto' : 'abierto'} ${waiting && s === WAITING ? 'onb-new' : ''}`}>
+                  {s}
+                  {waiting && s === WAITING && <Ic n="pause" />}
+                </span>
               </span>
             ))
           ) : (
@@ -488,6 +793,17 @@ function Preview(props: { state: State; tpl?: Template; industry: string; servic
             </>
           )}
         </div>
+        {waiting && (
+          <span className="tx-caption onb-then onb-new">
+            <Ic n="pause" />
+            Detiene el plazo de resolución
+          </span>
+        )}
+      </div>
+
+      <div className="onb-pv-block">
+        <span className="tx-overline">Cierre automático</span>
+        {c ? <span className="tx-caption">{autoCloseText(props.autoCloseDays)}</span> : <Sk w={140} />}
       </div>
 
       {props.team.length > 0 && (
@@ -504,4 +820,10 @@ function Preview(props: { state: State; tpl?: Template; industry: string; servic
       )}
     </aside>
   )
+}
+
+// "2 días sin actividad"; vacío, con una raya (el backend lo va a rechazar al guardar).
+function autoCloseText(days: string) {
+  const n = num(days)
+  return n === null ? '— días sin actividad' : `${count(n, 'día')} sin actividad`
 }
