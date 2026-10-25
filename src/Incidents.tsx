@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { api, ATTACHMENT_EXTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, type Priority, type State } from './api'
-import { fileProblem, fileSize } from './Attachments'
+import { api, type Priority, type State } from './api'
+import { Dropzone, FileChip, fileProblem } from './Attachments'
 import { A, FieldError, Filters, Ic, IncStage, IncidentId, Prio, ProblemId, Sla, StatusBadge, can, count, fields, isLate, userName, usersWith, type Run } from './ui'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
@@ -249,31 +249,32 @@ export function Incidents(props: {
                 Adjuntos <span className="opt">Opcional</span>
               </label>
               <div className="att-pick">
-                <input
+                <Dropzone
                   id="att"
-                  type="file"
-                  multiple
-                  className="tx-input"
-                  accept={ATTACHMENT_EXTS.join(',')}
-                  aria-describedby="att-h"
-                  onChange={(e) => {
-                    // Si alguno no se puede adjuntar, se avisa cuál y no se elige ninguno: hay que volver a elegir.
-                    const picked = Array.from(e.target.files ?? [])
+                  describedBy="att-h"
+                  onFiles={(picked) => {
+                    // Se suman a los ya elegidos (sin repetir) y los que no se pueden adjuntar se avisan: el resto sigue.
+                    const next = [...files]
                     const bad: string[] = []
-                    const ok: File[] = []
                     for (const f of picked) {
-                      const why = fileProblem(f, ok.length)
+                      if (next.some((x) => x.name === f.name && x.size === f.size && x.lastModified === f.lastModified)) continue
+                      const why = fileProblem(f, next.length)
                       if (why) bad.push(why)
-                      else ok.push(f)
+                      else next.push(f)
                     }
-                    if (bad.length) e.target.value = ''
-                    setFiles(bad.length ? [] : ok)
+                    setFiles(next)
                     setFileErrors(bad)
                   }}
                 />
+                {files.length > 0 && (
+                  <ul className="att-chips" aria-label="Archivos elegidos">
+                    {files.map((f, k) => (
+                      <FileChip key={`${f.name}-${f.size}-${f.lastModified}`} file={f} onRemove={() => setFiles(files.filter((_, j) => j !== k))} />
+                    ))}
+                  </ul>
+                )}
                 <span className="tx-help" id="att-h">
-                  Capturas, logs o PDFs que ayuden a entender el problema. Hasta {MAX_ATTACHMENTS} archivos de {fileSize(MAX_ATTACHMENT_BYTES)}.
-                  {files.length > 0 && ` Elegidos: ${files.length}.`}
+                  Se suben cuando registrás el incidente.
                 </span>
                 {fileErrors.length > 0 && (
                   <ul className="att-errors" role="alert">

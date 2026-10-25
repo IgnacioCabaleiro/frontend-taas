@@ -20,6 +20,68 @@ export function fileProblem(f: File, already: number): string {
 export const canAttach = (i: Incident, state: State) =>
   stage(i) !== 'cerrado' && (can(state, 'resolver') || (can(state, 'crear') && i.createdBy === state.me))
 
+// Zona para elegir archivos: se hace clic (o Enter) para abrir el selector, o se arrastran encima.
+// El input real queda en el DOM (transparente, sobre toda la zona) para que funcione con teclado y lector de pantalla.
+export function Dropzone({ onFiles, busy, disabled, id, describedBy }: { onFiles: (files: File[]) => void; busy?: boolean; disabled?: boolean; id?: string; describedBy?: string }) {
+  const [over, setOver] = useState(false)
+  const off = disabled || busy
+  return (
+    <label
+      className={`att-drop ${over ? 'is-over' : ''} ${off ? 'is-off' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault()
+        if (!off) setOver(true)
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setOver(false)
+        if (!off) onFiles(Array.from(e.dataTransfer.files))
+      }}
+    >
+      <input
+        id={id}
+        type="file"
+        multiple
+        disabled={off}
+        accept={ATTACHMENT_EXTS.join(',')}
+        aria-describedby={describedBy}
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          e.target.value = '' // permite volver a elegir el mismo archivo
+          onFiles(files)
+        }}
+      />
+      <span className="ic">
+        <Ic n={busy ? 'clock' : 'clip'} />
+      </span>
+      <span className="tx-body">
+        <b>{busy ? 'Subiendo…' : 'Elegí archivos'}</b>
+        {!busy && ' o arrastralos acá'}
+        <small>
+          Imágenes, PDF, texto, logs, CSV o ZIP · hasta {MAX_ATTACHMENTS} archivos de {fileSize(MAX_ATTACHMENT_BYTES)}
+        </small>
+      </span>
+    </label>
+  )
+}
+
+// Un archivo elegido todavía sin subir, con su tamaño y la opción de sacarlo.
+export function FileChip({ file, onRemove }: { file: File; onRemove: () => void }) {
+  return (
+    <li className="att-chip">
+      <Ic n="clip" />
+      <span className="nm" title={file.name}>
+        {file.name}
+      </span>
+      <small>{fileSize(file.size)}</small>
+      <button type="button" className="rm" aria-label={`Sacar ${file.name}`} onClick={onRemove}>
+        <Ic n="x" />
+      </button>
+    </li>
+  )
+}
+
 const isImage = (a: Attachment) => a.contentType.startsWith('image/')
 
 export function AttachmentsPanel({ i, state, run }: { i: Incident; state: State; run: Run }) {
@@ -113,37 +175,28 @@ export function AttachmentsPanel({ i, state, run }: { i: Incident; state: State;
       )}
       {editable && (
         <div className="att-pick">
-          <label className="tx-btn secondary" style={{ alignSelf: 'flex-start', cursor: 'pointer' }}>
-            <Ic n="plus" />
-            {busy === 'upload' ? 'Subiendo…' : 'Adjuntar archivos'}
-            <input
-              type="file"
-              multiple
-              hidden
-              disabled={busy !== ''}
-              accept={ATTACHMENT_EXTS.join(',')}
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? [])
-                e.target.value = '' // permite volver a elegir el mismo archivo
-                setErrors([])
-                guard('upload', async () => {
-                  let count = list.length
-                  for (const f of files) {
-                    const why = fileProblem(f, count)
-                    if (why) {
-                      setErrors((x) => [...x, why])
-                      continue
-                    }
-                    const s = await run(api.addAttachment(i.id, f), { onError: (m) => setErrors((x) => [...x, `${f.name}: ${m}`]) })
-                    if (s) count++
+          <Dropzone
+            busy={busy === 'upload'}
+            disabled={busy !== ''}
+            describedBy="att-help"
+            onFiles={(files) => {
+              setErrors([])
+              guard('upload', async () => {
+                let count = list.length
+                for (const f of files) {
+                  const why = fileProblem(f, count)
+                  if (why) {
+                    setErrors((x) => [...x, why])
+                    continue
                   }
-                })
-              }}
-            />
-          </label>
-          <span className="tx-help">
-            Hasta {MAX_ATTACHMENTS} archivos de {fileSize(MAX_ATTACHMENT_BYTES)}: imágenes, PDF, texto, logs, CSV o ZIP. {!canResolve && 'Los ve el equipo que atiende tu incidente.'}
-            {canResolve && 'Los ve también el solicitante: para algo interno usá una nota.'}
+                  const s = await run(api.addAttachment(i.id, f), { onError: (m) => setErrors((x) => [...x, `${f.name}: ${m}`]) })
+                  if (s) count++
+                }
+              })
+            }}
+          />
+          <span className="tx-help" id="att-help">
+            {canResolve ? 'Los ve también el solicitante: para algo interno usá una nota.' : 'Los ve el equipo que atiende tu incidente.'}
           </span>
           {errors.length > 0 && (
             <ul className="att-errors" role="alert">
