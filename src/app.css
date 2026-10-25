@@ -178,6 +178,34 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 .inc-composer .tx-seg { max-width: 440px; }
 .inc-composer.is-note .tx-textarea { background: var(--status-conocido-bg); }
 
+/* Adjuntos del incidente */
+.att-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.att-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-sunken); border: 1px solid var(--hairline); }
+.att-item .nm { flex: 1 1 auto; min-width: 0; }
+.att-item .nm b { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.att-item .nm span { font-size: 12px; color: var(--ink-subtle); }
+.att-item .acts { display: flex; gap: 6px; flex-shrink: 0; }
+.att-pick { display: flex; flex-direction: column; gap: 8px; }
+.att-drop { position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1.5px dashed var(--hairline-strong); border-radius: var(--radius-md); background: var(--surface-sunken); cursor: pointer; transition: border-color .15s, background .15s; }
+.att-drop:hover, .att-drop.is-over { border-color: var(--brand); background: var(--brand-tint); }
+.att-drop:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint); }
+.att-drop.is-off { cursor: default; opacity: .65; }
+.att-drop.is-off:hover { border-color: var(--hairline-strong); background: var(--surface-sunken); }
+/* El input queda en el DOM (foco con teclado, lector de pantalla) pero sin dibujarse: la zona se abre por el label. */
+.att-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); pointer-events: none; }
+.att-drop .ic { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--brand-tint); color: var(--brand-ink); }
+.att-drop .tx-body { font-size: 14px; line-height: 20px; color: var(--ink-muted); }
+.att-drop .tx-body b { color: var(--ink); font-weight: 600; }
+.att-drop .tx-body small { display: block; font-size: 12px; line-height: 18px; color: var(--ink-subtle); }
+.att-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.att-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 5px 6px 5px 10px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--hairline); font-size: 13px; }
+.att-chip .nm { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.att-chip small { color: var(--ink-subtle); font-size: 12px; white-space: nowrap; }
+.att-chip .rm { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-muted); cursor: pointer; }
+.att-chip .rm:hover, .att-chip .rm:focus-visible { background: var(--surface-hover); color: var(--danger-fg); }
+.att-errors { margin: 0; padding-left: 18px; font-size: 13px; color: var(--danger-fg); }
+@media (max-width: 640px) { .att-item { flex-wrap: wrap; } .att-item .acts { width: 100%; } }
+
 /* Gestión y SLA del detalle: los textos de vencimiento pueden partirse en el panel angosto */
 .inc-facts .tx-caption { white-space: normal !important; }
 .inc-composer .tx-seg { height: auto; min-height: 38px; }
