@@ -206,6 +206,16 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 .att-errors { margin: 0; padding-left: 18px; font-size: 13px; color: var(--danger-fg); }
 @media (max-width: 640px) { .att-item { flex-wrap: wrap; } .att-item .acts { width: 100%; } }
 
+/* Métricas de SLA */
+.sla-pairs { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%; }
+.sla-pairs .viz-bar { flex: 1 1 0; max-width: 22px; min-height: 2px; }
+.sla-pairs .viz-bar.b { background: var(--viz-2); }
+.sla-risk { color: var(--danger-fg); font-weight: 600; }
+.sla-bad { color: var(--danger-fg); }
+.sla-table .name { font-weight: 600; }
+.sla-table small { display: block; color: var(--ink-subtle); font-size: 12px; }
+@media (max-width: 760px) { .sla-wide { overflow-x: auto; } .sla-table { min-width: 620px; } }
+
 /* Gestión y SLA del detalle: los textos de vencimiento pueden partirse en el panel angosto */
 .inc-facts .tx-caption { white-space: normal !important; }
 .inc-composer .tx-seg { height: auto; min-height: 38px; }
