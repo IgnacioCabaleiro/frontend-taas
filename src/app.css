@@ -178,6 +178,18 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 .inc-composer .tx-seg { max-width: 440px; }
 .inc-composer.is-note .tx-textarea { background: var(--status-conocido-bg); }
 
+/* Adjuntos del incidente */
+.att-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.att-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-sunken); border: 1px solid var(--hairline); }
+.att-item .nm { flex: 1 1 auto; min-width: 0; }
+.att-item .nm b { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.att-item .nm span { font-size: 12px; color: var(--ink-subtle); }
+.att-item .acts { display: flex; gap: 6px; flex-shrink: 0; }
+.att-pick { display: flex; flex-direction: column; gap: 8px; }
+.att-pick input[type=file] { font-size: 13px; max-width: 100%; }
+.att-errors { margin: 0; padding-left: 18px; font-size: 13px; color: var(--danger-fg); }
+@media (max-width: 640px) { .att-item { flex-wrap: wrap; } .att-item .acts { width: 100%; } }
+
 /* Gestión y SLA del detalle: los textos de vencimiento pueden partirse en el panel angosto */
 .inc-facts .tx-caption { white-space: normal !important; }
 .inc-composer .tx-seg { height: auto; min-height: 38px; }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { api, type Priority, type State } from './api'
+import { api, ATTACHMENT_EXTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, type Priority, type State } from './api'
+import { fileProblem, fileSize } from './Attachments'
 import { A, FieldError, Filters, Ic, IncStage, IncidentId, Prio, ProblemId, Sla, StatusBadge, can, count, fields, isLate, userName, usersWith, type Run } from './ui'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
@@ -26,6 +27,9 @@ export function Incidents(props: {
   const [linkIt, setLinkIt] = useState(true)
   const [dismissed, setDismissed] = useState('')
   const [errs, setErrs] = useState<Record<string, boolean>>({})
+  // Archivos elegidos para adjuntar al registrar, y los avisos si alguno no se pudo subir.
+  const [files, setFiles] = useState<File[]>([])
+  const [fileErrors, setFileErrors] = useState<string[]>([])
   type Filter = 'abiertos' | 'mios' | 'vencidos' | 'pausa' | 'sin' | 'resueltos' | 'cerrados' | 'todos'
   const [filter, setFilter] = useState<Filter>('abiertos')
   const [busy, setBusy] = useState(false)
@@ -108,6 +112,14 @@ export function Incidents(props: {
             const ok = await run(api.createIncident(body))
             setBusy(false)
             if (ok) {
+              // El incidente ya existe: los archivos se suben a continuación. Si alguno falla, el incidente igual quedó registrado.
+              const id = Math.max(...ok.incidents.map((x) => x.id))
+              const failed: string[] = []
+              for (const f of files) {
+                await run(api.addAttachment(id, f), { onError: (m) => failed.push(`${f.name}: ${m}`) })
+              }
+              setFiles([])
+              setFileErrors(failed.length ? [`El incidente #${id} se registró, pero no se pudieron adjuntar: `, ...failed] : [])
               // El formulario se vuelve a montar vacío: sin la precarga del relacionado.
               setFormKey(formKey + 1)
               setPrefill(undefined)
@@ -231,6 +243,46 @@ export function Incidents(props: {
                 Detalle <span className="opt">Opcional</span>
               </label>
               <input id="d" name="description" className="tx-input" placeholder="Qué intentó la persona, desde cuándo pasa, a quiénes afecta" />
+            </div>
+            <div className="tx-field" style={{ gridColumn: 'span 2' }}>
+              <label className="tx-label" htmlFor="att">
+                Adjuntos <span className="opt">Opcional</span>
+              </label>
+              <div className="att-pick">
+                <input
+                  id="att"
+                  type="file"
+                  multiple
+                  className="tx-input"
+                  accept={ATTACHMENT_EXTS.join(',')}
+                  aria-describedby="att-h"
+                  onChange={(e) => {
+                    // Si alguno no se puede adjuntar, se avisa cuál y no se elige ninguno: hay que volver a elegir.
+                    const picked = Array.from(e.target.files ?? [])
+                    const bad: string[] = []
+                    const ok: File[] = []
+                    for (const f of picked) {
+                      const why = fileProblem(f, ok.length)
+                      if (why) bad.push(why)
+                      else ok.push(f)
+                    }
+                    if (bad.length) e.target.value = ''
+                    setFiles(bad.length ? [] : ok)
+                    setFileErrors(bad)
+                  }}
+                />
+                <span className="tx-help" id="att-h">
+                  Capturas, logs o PDFs que ayuden a entender el problema. Hasta {MAX_ATTACHMENTS} archivos de {fileSize(MAX_ATTACHMENT_BYTES)}.
+                  {files.length > 0 && ` Elegidos: ${files.length}.`}
+                </span>
+                {fileErrors.length > 0 && (
+                  <ul className="att-errors" role="alert">
+                    {fileErrors.map((m, k) => (
+                      <li key={k}>{m}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
         </form>

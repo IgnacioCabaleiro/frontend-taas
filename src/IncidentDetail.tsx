@@ -2,6 +2,7 @@
 // con el solicitante y las notas de trabajo, y los dos SLA.
 import { useState } from 'react'
 import { api, type Incident, type ResolutionCode, type State } from './api'
+import { AttachmentsPanel } from './Attachments'
 import {
   A,
   CLOSING_CODES,
@@ -266,6 +267,8 @@ export function IncidentDetail(props: {
               </>
             )}
           </section>
+
+          <AttachmentsPanel i={i} state={state} run={run} />
 
           <section className="tx-panel tx-solid" aria-labelledby="inc-act">
             <h2 className="tx-h3" id="inc-act">

@@ -50,13 +50,20 @@ export type Incident = {
   closedAt?: string
   autoCloseHold: boolean // el solicitante respondió estando resuelto: ya no se cierra solo
   relatedIncidentId: number // 0 = ninguno; si no, el incidente cerrado que este continúa
+  attachments: Attachment[]
 }
+
+// Archivo adjunto de un incidente. Lo ve cualquiera que vea el incidente, también quien lo reportó.
+export type Attachment = { id: string; name: string; size: number; contentType: string; uploadedBy: number; uploadedAt: string }
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+export const MAX_ATTACHMENTS = 10
+export const ATTACHMENT_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf', '.txt', '.log', '.csv', '.zip']
 
 export type ResolutionCode = 'solucionado' | 'workaround' | 'duplicado' | 'sin_reproducir' | 'cancelado'
 // Historial del incidente (userId 0 = Sistema). Quien solo reporta no recibe las notas.
 export type IncidentEvent = {
   at: string
-  kind: 'creado' | 'estado' | 'asignado' | 'problema' | 'respuesta' | 'nota' | 'resuelto' | 'reabierto' | 'cerrado' | 'relacionado'
+  kind: 'creado' | 'estado' | 'asignado' | 'problema' | 'respuesta' | 'nota' | 'resuelto' | 'reabierto' | 'cerrado' | 'relacionado' | 'adjunto'
   text: string
   userId: number
 }
@@ -128,8 +135,9 @@ export const session = {
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const res = await fetch(API + path, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    // Con FormData el navegador pone el Content-Type (con el boundary del multipart).
+    headers: { ...(!(body instanceof FormData) && { 'Content-Type': 'application/json' }), ...(token && { Authorization: `Bearer ${token}` }) },
+    body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
   }).catch(() => {
     throw Object.assign(new Error('No pudimos conectar con el servidor.'), { offline: true })
   })
@@ -163,6 +171,23 @@ export const api = {
   comment: (id: number, text: string, isPublic: boolean) => t(`/incidents/${id}/comments`, { text, public: isPublic }),
   reopen: (id: number, reason: string) => t(`/incidents/${id}/reopen`, { reason }),
   close: (id: number) => t(`/incidents/${id}/close`, {}),
+  addAttachment: (id: number, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<State>(`/incidents/${id}/attachments`, 'POST', form)
+  },
+  removeAttachment: (id: number, attachmentId: string) => t(`/incidents/${id}/attachments/${attachmentId}`, undefined, 'DELETE'),
+  // La descarga pide el token en un header: no sirve un <a href>, así que se baja el archivo y se entrega como blob.
+  async attachmentBlob(id: number, attachmentId: string): Promise<Blob> {
+    const res = await fetch(`${API}/incidents/${id}/attachments/${attachmentId}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }).catch(() => {
+      throw Object.assign(new Error('No pudimos conectar con el servidor.'), { offline: true })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => null)
+      throw Object.assign(new Error(data?.error ?? res.statusText), res.status === 401 ? { expired: true } : {})
+    }
+    return res.blob()
+  },
   createProblem: (p: Record<string, unknown>) => t('/problems', p),
   advance: (id: number, data: Record<string, string>) => t(`/problems/${id}/advance`, data),
   setOwner: (id: number, ownerId: number) => t(`/problems/${id}/owner`, { ownerId }),
