@@ -110,6 +110,30 @@ export type State = {
   suggestions: { service: string; incidentIds: number[] }[]
 }
 
+// Métricas de SLA (GET /metrics/sla): sobre los incidentes creados en el período. Un porcentaje null = todavía no hay nada que medir.
+export type SlaStat = { measured: number; late: number; compliance: number | null }
+export type SlaGroup = {
+  id: number // en el desglose por responsable, el usuario (0 = sin asignar)
+  name: string
+  incidents: number
+  resolution: SlaStat
+  response: SlaStat
+  avgResolutionHours: number | null
+  avgResponseHours: number | null
+}
+export type SlaRisk = { id: number; title: string; service: string; priority: Priority; assigneeId: number; kind: 'resolucion' | 'respuesta'; dueAt: string; late: boolean }
+export type SlaMetrics = {
+  days: number
+  generatedAt: string
+  total: SlaGroup
+  byPriority: SlaGroup[]
+  byService: SlaGroup[]
+  byAssignee: SlaGroup[]
+  trend: { from: string; to: string; incidents: number; resolution: SlaStat; response: SlaStat }[]
+  atRisk: SlaRisk[]
+}
+export const SLA_PERIODS = [7, 30, 90] as const
+
 export type Template = { key: string; industry: string; config: Config }
 
 // La sesión es un token que se guarda en el navegador; si el storage no está disponible, dura lo que la pestaña.
@@ -156,6 +180,7 @@ export const api = {
   templates: () => request<Template[]>('/templates'),
 
   state: () => t('/state'),
+  slaMetrics: (days: number) => request<SlaMetrics>(`/metrics/sla?days=${days}`),
   onboard: (setup: Setup) => t('/onboarding', setup),
   finishOnboarding: () => t('/onboarding/finish', {}),
   setConfig: (c: Config) => t('/config', c, 'PUT'),

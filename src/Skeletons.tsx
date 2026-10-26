@@ -246,6 +246,7 @@ function SettingsSkeleton() {
 
 export const SKELETON = {
   panel: PanelSkeleton,
+  sla: PanelSkeleton,
   problemas: BoardSkeleton,
   incidentes: IncidentsSkeleton,
   kedb: KnownErrorsSkeleton,

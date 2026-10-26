@@ -4,6 +4,7 @@ import { A, Ic, can, initials, type Run } from './ui'
 import { Auth } from './Auth'
 import { Onboarding } from './Onboarding'
 import { Dashboard } from './Dashboard'
+import { SlaMetrics } from './SlaMetrics'
 import { Board, NewProblemModal, ProblemDetail } from './Problems'
 import { Incidents } from './Incidents'
 import { IncidentDetail } from './IncidentDetail'
@@ -13,6 +14,7 @@ import { SKELETON } from './Skeletons'
 
 const TABS = {
   panel: { nav: 'Panel', icon: 'chart', title: 'Panel', sub: 'Qué está pasando: volumen, tiempos y dónde se concentran los incidentes.' },
+  sla: { nav: 'SLA', icon: 'clock', title: 'Métricas de SLA', sub: 'Cuánto se cumplen los plazos de respuesta y resolución, dónde fallan y qué está por vencer.' },
   problemas: { nav: 'Problemas', icon: 'target', title: 'Problemas', sub: 'Detectá incidentes recurrentes, investigá la causa y cerrá todo junto.' },
   incidentes: { nav: 'Incidentes', icon: 'alert', title: 'Incidentes', sub: 'Registrá lo que está pasando y seguí cada ticket hasta que se resuelve.' },
   kedb: { nav: 'Errores conocidos', icon: 'book', title: 'Errores conocidos', sub: 'La base de conocimiento del equipo: causas raíz, workarounds y soluciones.' },
@@ -26,6 +28,7 @@ function allowedTabs(s: State): Tab[] {
   const problems = s.config.modules.problems
   const tabs: [Tab, boolean][] = [
     ['panel', p('panel')],
+    ['sla', s.config.modules.sla && p('panel')],
     ['problemas', problems && p('problemas')],
     ['incidentes', p('crear') || p('resolver')],
     ['kedb', problems && (p('resolver') || p('problemas'))],
@@ -236,6 +239,7 @@ export default function App() {
           {state && state.onboarded && tabs.includes(current) && (
             <>
               {current === 'panel' && <Dashboard state={state} openProblem={goProblem} />}
+              {current === 'sla' && <SlaMetrics state={state} run={run} goIncident={goIncident} />}
               {current === 'problemas' && open && <ProblemDetail p={open} state={state} run={run} back={() => setOpenId(0)} goIncident={goIncident} />}
               {current === 'problemas' && !open && <Board state={state} run={run} open={setOpenId} />}
               {current === 'incidentes' && openInc && (
