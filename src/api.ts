@@ -94,6 +94,9 @@ export type Problem = {
 }
 
 // La cuenta del cliente, tal como la ve el usuario logueado (el backend ya recorta según sus permisos).
+// Una foto de la configuración. Volver a una versión crea otra nueva: el historial solo crece.
+export type ConfigVersion = { id: number; at: string; userId: number; changes: string[]; restoredFrom: number; config: Config }
+
 export type State = {
   id: number
   name: string
@@ -103,6 +106,7 @@ export type State = {
   me: number
   maxUsers: number
   config: Config
+  configVersions: ConfigVersion[] // solo con permiso de configurar
   roles: Role[]
   users: User[]
   incidents: Incident[]
@@ -184,6 +188,7 @@ export const api = {
   onboard: (setup: Setup) => t('/onboarding', setup),
   finishOnboarding: () => t('/onboarding/finish', {}),
   setConfig: (c: Config) => t('/config', c, 'PUT'),
+  restoreVersion: (id: number) => t(`/config/versions/${id}/restore`, {}),
 
   addUser: (u: { name: string; email: string; password: string; roleId: number }) => t('/users', u),
   setUserRole: (id: number, roleId: number) => t(`/users/${id}`, { roleId }, 'PUT'),
