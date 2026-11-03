@@ -1,7 +1,7 @@
 // Configuración de la cuenta: la ticketera a medida de la empresa, y quién puede hacer qué.
 import { useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { api, type Config, type Field, type Perm, type Priority, type State } from './api'
-import { FieldError, Ic, Prio, count, fields, initials, type Run } from './ui'
+import { FieldError, Ic, Prio, count, fields, hoursToDraft, hoursToSent, initials, num, type Run } from './ui'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
 const PERMS: [Perm, string][] = [
@@ -12,7 +12,6 @@ const PERMS: [Perm, string][] = [
   ['config', 'Configurar la cuenta'],
 ]
 const clone = (c: Config): Config => JSON.parse(JSON.stringify(c))
-const int = (s: string) => Math.max(0, Math.floor(Number(s)) || 0)
 
 // Borrador de la configuración: los números guardan el texto del input, para mostrar exactamente lo que se escribe (también vacío).
 type NumKeys = 'slaHours' | 'responseHours' | 'recurrenceMin' | 'recurrenceDays' | 'autoCloseDays'
@@ -23,7 +22,7 @@ type Draft = Omit<Config, NumKeys> & {
   recurrenceDays: string
   autoCloseDays: string
 }
-// Lo que se envía. Un número vacío viaja como null: el backend lo rechaza con su mensaje (sin validación nueva en el front).
+// Lo que se envía (los ayudantes de números están en ui.tsx, compartidos con el onboarding). Un número vacío viaja como null: el backend lo rechaza con su mensaje (sin validación nueva en el front).
 type Sent = Omit<Config, NumKeys> & {
   slaHours: Record<Priority, number | null>
   responseHours: Record<Priority, number | null>
@@ -31,7 +30,6 @@ type Sent = Omit<Config, NumKeys> & {
   recurrenceDays: number | null
   autoCloseDays: number | null
 }
-const hoursToDraft = (h: Record<Priority, number>) => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, String(v)])) as Draft['slaHours']
 const toDraft = (c: Config): Draft => {
   const d = clone(c)
   return {
@@ -43,8 +41,6 @@ const toDraft = (c: Config): Draft => {
     autoCloseDays: String(d.autoCloseDays),
   }
 }
-const num = (s: string) => (s.trim() === '' ? null : int(s))
-const hoursToSent = (h: Draft['slaHours']) => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, num(v)])) as Sent['slaHours']
 const toSent = (d: Draft): Sent => ({
   ...d,
   slaHours: hoursToSent(d.slaHours),
