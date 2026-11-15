@@ -32,6 +32,9 @@ export type Incident = {
   description: string
   service: string
   priority: Priority
+  // De los que sale la prioridad (matriz impacto × urgencia). '' si la prioridad se eligió a mano (incidentes anteriores).
+  impact: Priority | ''
+  urgency: Priority | ''
   status: string // uno de config.states
   fields: Record<string, string>
   createdBy: number
@@ -72,7 +75,10 @@ export type NewIncident = {
   title: string
   description?: string
   service: string
-  priority: Priority
+  // El backend calcula la prioridad con la matriz; priority solo se usa si no vienen impacto ni urgencia.
+  impact?: Priority
+  urgency?: Priority
+  priority?: Priority
   fields: Record<string, string>
   assigneeId?: number
   problemId?: number
