@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { api, type Incident, type ResolutionCode, type State } from './api'
 import { AttachmentsPanel } from './Attachments'
 import { RelatedPanel } from './Knowledge'
+import { RatingBlock } from './Rating'
 import {
   A,
   CLOSING_CODES,
@@ -208,6 +209,7 @@ export function IncidentDetail(props: {
             {st === 'resuelto' && (
               <>
                 {resolutionBlock}
+                <RatingBlock i={i} state={state} run={run} />
                 <div className="tx-callout">
                   <div className="tx-row" style={{ gap: 10 }}>
                     <Ic n="clock" />
@@ -248,6 +250,7 @@ export function IncidentDetail(props: {
             {st === 'cerrado' && (
               <>
                 {resolutionBlock}
+                <RatingBlock i={i} state={state} run={run} />
                 <div className="tx-callout">
                   <div className="tx-row" style={{ gap: 10 }}>
                     <Ic n="lock" />

@@ -299,3 +299,14 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 .inc-search input { flex: 1; border: 0; background: none; outline: none; height: 100%; color: var(--ink); font-size: 14px; }
 .inc-sort { display: flex; align-items: center; gap: 8px; }
 .inc-sort .tx-input { width: auto; }
+
+/* ---------- Valoración ---------- */
+.rt-ask, .rt-done { display: flex; flex-direction: column; gap: 10px; }
+.rt-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.rt-opt { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: var(--radius-md); border: 1px solid var(--control-border); background: var(--surface-solid); color: var(--ink-muted); font-size: 12px; cursor: pointer; }
+.rt-opt b { font-size: 16px; color: var(--ink); }
+.rt-opt:hover { border-color: var(--brand); }
+.rt-opt.on { border-color: var(--brand); background: var(--brand-tint); color: var(--ink); }
+.rt-stars { display: inline-flex; gap: 3px; }
+.rt-stars i { width: 10px; height: 10px; border-radius: 50%; background: var(--hairline-strong); }
+.rt-stars i.on { background: var(--status-conocido-dot); }

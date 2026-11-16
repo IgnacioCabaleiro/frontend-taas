@@ -66,6 +66,9 @@ export type Incident = {
   autoCloseHold: boolean // el solicitante respondió estando resuelto: ya no se cierra solo
   relatedIncidentId: number // 0 = ninguno; si no, el incidente cerrado que este continúa
   attachments: Attachment[]
+  rating: number // 1 a 5; 0 = sin valorar
+  ratingComment: string
+  ratedAt?: string
 }
 
 // Archivo adjunto de un incidente. Lo ve cualquiera que vea el incidente, también quien lo reportó.
@@ -248,6 +251,7 @@ export const api = {
   createIncident: (i: NewIncident) => t('/incidents', i),
   updateIncident: (id: number, patch: IncidentPatch) => t(`/incidents/${id}`, patch),
   comment: (id: number, text: string, isPublic: boolean) => t(`/incidents/${id}/comments`, { text, public: isPublic }),
+  rate: (id: number, rating: number, comment: string) => t(`/incidents/${id}/rating`, { rating, comment }),
   reopen: (id: number, reason: string) => t(`/incidents/${id}/reopen`, { reason }),
   close: (id: number) => t(`/incidents/${id}/close`, {}),
   addAttachment: (id: number, file: File) => {
