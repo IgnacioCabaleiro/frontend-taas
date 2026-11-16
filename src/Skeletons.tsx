@@ -19,14 +19,14 @@ function BoardSkeleton() {
     <>
       <section className="tx-metrics" aria-hidden="true">
         {['62%', '58%', '82%', '66%'].map((w) => (
-          <div key={w} className="tx-metric tx-glass">
+          <div key={w} className="tx-metric tx-solid">
             <Sk c="t-sm" w={w} style={{ margin: '4px 0 6px' }} />
             <Sk c="t-metric" style={{ marginTop: 'auto' }} />
             <Sk c="t-xs" w="55%" style={{ marginTop: 6 }} />
           </div>
         ))}
       </section>
-      <section className="tx-reco tx-glass" aria-hidden="true">
+      <section className="tx-reco tx-solid" aria-hidden="true">
         <div className="tx-reco-head">
           <Sk c="box" w={40} h={40} />
           <div style={{ flex: 1, paddingTop: 4, ...col(8) }}>
@@ -103,7 +103,7 @@ function BoardSkeleton() {
 function IncidentsSkeleton() {
   return (
     <>
-      <div className="tx-inline-form tx-glass" aria-hidden="true">
+      <div className="tx-inline-form tx-solid" aria-hidden="true">
         {[120, 110, 70].map((w) => (
           <div key={w} className="tx-field">
             <Sk c="t-sm" w={w} style={{ margin: '3px 0' }} />
@@ -170,7 +170,7 @@ function KnownErrorsSkeleton() {
   return (
     <>
       {/* El buscador se pinta desde el primer frame; se habilita cuando llegan los datos. */}
-      <label className="tx-search tx-glass">
+      <label className="tx-search tx-solid">
         <Ic n="search" size="lg" />
         <input type="search" disabled placeholder="Buscar por síntoma, servicio o causa…" aria-label="Buscar en errores conocidos" />
       </label>
@@ -208,7 +208,7 @@ function PanelSkeleton() {
       {pills([130, 84, 84])}
       <section className="tx-metrics" aria-hidden="true">
         {['62%', '70%', '82%', '66%'].map((w) => (
-          <div key={w} className="tx-metric tx-glass">
+          <div key={w} className="tx-metric tx-solid">
             <Sk c="t-sm" w={w} style={{ margin: '4px 0 6px' }} />
             <Sk c="t-metric" style={{ marginTop: 'auto' }} />
             <Sk c="t-xs" w="55%" style={{ marginTop: 6 }} />

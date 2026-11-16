@@ -330,3 +330,30 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 .heat-day { text-align: center; color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
 .heat-svc { color: var(--ink-muted); font-weight: 500; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .heat-cell { height: 26px; border-radius: 5px; display: grid; place-items: center; color: var(--on-brand); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Simulador de SLA ---------- */
+.sim-grid { display: grid; grid-template-columns: max-content repeat(3, minmax(0, 120px)); gap: 8px 12px; align-items: center; }
+.sim-num { text-align: center; }
+.sim-delta { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.sim-delta span { color: var(--ink-subtle); }
+.sim-delta em { font-style: normal; font-size: 12px; font-weight: 600; margin-left: 4px; }
+.sim-delta em.up { color: var(--status-resuelto-fg); }
+.sim-delta em.down { color: var(--danger-fg); }
+.sim-total td { font-weight: 600; background: var(--surface-sunken); }
+
+/* ---------- Swarming y radar ---------- */
+.swarm.on { border-color: var(--status-analisis-dot); box-shadow: 0 0 0 3px var(--status-analisis-bg); }
+.swarm-who { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.swarm-who .tx-avatar { width: 26px; height: 26px; font-size: 11px; }
+.swarm-who .tx-caption { margin-left: 6px; }
+.swarm-notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.swarm-note { padding: 8px 10px; border-radius: var(--radius-md); background: var(--surface-sunken); border-left: 0; display: flex; flex-direction: column; gap: 2px; }
+.swarm-note p { font-size: 13px; }
+.swarm-note.k-hallazgo { background: var(--status-resuelto-bg); }
+.swarm-note.k-hallazgo .tx-overline { color: var(--status-resuelto-fg); }
+.swarm-note.k-descartado p { color: var(--ink-subtle); text-decoration: line-through; }
+.radar .tx-reco-ic { background: var(--status-analisis-dot); }
+
+.onb-ke { gap: 10px; }
+.onb-ke-list { margin: 0; padding: 0 0 0 28px; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.invite { margin-top: 4px; }

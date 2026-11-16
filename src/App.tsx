@@ -3,6 +3,7 @@ import { api, session, type Perm, type State } from './api'
 import { A, Ic, Logo, can, count, initials, isLate, type Run } from './ui'
 import { Auth } from './Auth'
 import { Onboarding, clearOnboardingDraft } from './Onboarding'
+import { Invitation, invitationToken } from './Invitation'
 import { Dashboard } from './Dashboard'
 import { SlaMetrics } from './SlaMetrics'
 import { Board, NewProblemModal, ProblemDetail } from './Problems'
@@ -145,6 +146,8 @@ export default function App() {
     if (logged) load()
   }, [logged])
 
+  const invite = invitationToken()
+  if (invite) return <Invitation token={invite} />
   if (!logged) return <Auth onEnter={() => setLogged(true)} />
   if (state && !state.onboarded && can(state, 'config'))
     return <Onboarding state={state} run={run} onDone={(createdTicket) => setTab(createdTicket ? 'incidentes' : 'panel')} onLogout={logout} />
@@ -258,7 +261,7 @@ export default function App() {
           )}
 
           {!state && error && (
-            <section className="tx-glass" style={{ borderRadius: 'var(--radius-xl)' }}>
+            <section className="tx-solid" style={{ borderRadius: 'var(--radius-xl)' }}>
               <div className="tx-empty error" role="alert">
                 <div className="tx-empty-ic tx-glass-strong">
                   <Ic n="offline" size="xl" />

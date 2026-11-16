@@ -127,7 +127,7 @@ export function RelatedPanel(props: { incidentId: number; refresh: string; open:
 
   if (!data || (data.problems.length === 0 && data.incidents.length === 0)) return null
   return (
-    <section className="tx-side-card tx-glass" aria-labelledby="kn-rel">
+    <section className="tx-side-card tx-solid" aria-labelledby="kn-rel">
       <h3 className="tx-h3" id="kn-rel">
         Se parece a
       </h3>

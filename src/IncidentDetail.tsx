@@ -99,13 +99,10 @@ export function IncidentDetail(props: {
   const head = (
     <div className="tx-panel-head">
       <div>
-        <span className="tx-overline">
-          {step < 4 ? `Etapa ${step + 1} de 4` : 'Etapa 4 de 4 · Solo lectura'}
-          {i.reopenCount > 0 && ` · ${i.reopenCount === 1 ? 'Reabierto una vez' : `Reabierto ${i.reopenCount} veces`}`}
-        </span>
+        {/* La etapa ya se ve en la cabecera y en el recorrido: acá solo qué hay que hacer ahora. */}
         <h2 className="tx-h3">{STEP_NAME[Math.min(step, 3)]}</h2>
+        {i.reopenCount > 0 && <span className="tx-caption">{i.reopenCount === 1 ? 'Reabierto una vez' : `Reabierto ${i.reopenCount} veces`}</span>}
       </div>
-      <StageBadge i={i} />
     </div>
   )
 
@@ -131,7 +128,7 @@ export function IncidentDetail(props: {
         <Ic n="back" />
         Volver a incidentes
       </A>
-      <header className="tx-detail-head tx-glass" style={{ marginTop: -12 }}>
+      <header className="tx-detail-head tx-solid" style={{ marginTop: -12 }}>
         <div className="meta">
           <span className="tx-id" style={{ fontSize: 14 }}>
             #{i.id}
@@ -149,7 +146,7 @@ export function IncidentDetail(props: {
         <h1 className="tx-h1">{i.title}</h1>
       </header>
 
-      <ol className="tx-stepper tx-glass" aria-label="Etapas del incidente">
+      <ol className="tx-stepper tx-solid" aria-label="Etapas del incidente">
         {STEP_NAME.map((nm, k) => {
           const done = k < step
           return (
@@ -320,7 +317,7 @@ export function IncidentDetail(props: {
               goIncident={props.goIncident}
             />
           )}
-          <section className="tx-side-card tx-glass">
+          <section className="tx-side-card tx-solid">
             <h3 className="tx-h3">Gestión</h3>
             <dl className="inc-facts">
               <dt>
@@ -402,7 +399,7 @@ export function IncidentDetail(props: {
           </section>
 
           {config.modules.sla && (
-            <section className="tx-side-card tx-glass">
+            <section className="tx-side-card tx-solid">
               <h3 className="tx-h3">SLA</h3>
               <dl className="inc-facts">
                 <dt>Primera respuesta</dt>
@@ -419,7 +416,7 @@ export function IncidentDetail(props: {
             </section>
           )}
 
-          <section className="tx-side-card tx-glass">
+          <section className="tx-side-card tx-solid">
             <h3 className="tx-h3">Registro</h3>
             <dl className="inc-facts">
               <dt>Registrado por</dt>

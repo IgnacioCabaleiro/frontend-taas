@@ -3,12 +3,14 @@
 // mostrándole a la derecha cómo va quedando.
 import { useEffect, useState, type ReactNode } from 'react'
 import { api, type Priority, type Setup, type State, type Template } from './api'
-import { FieldError, Ic, LevelPicker, Logo, Prio, count, fields, hoursToDraft, hoursToSent, initials, num, priorityFor, type Run } from './ui'
+import { Check, FieldError, Ic, LevelPicker, Logo, Prio, count, fields, hoursToDraft, hoursToSent, initials, num, priorityFor, type Run } from './ui'
 import { ListEditor } from './Settings'
+import { InviteLink } from './People'
+import { Preview } from './OnboardingPreview'
 
-const PRIOS: Priority[] = ['alta', 'media', 'baja']
+export const PRIOS: Priority[] = ['alta', 'media', 'baja']
 
-type Answers = Record<'team' | 'sla' | 'problems' | 'fields', boolean | null>
+export type Answers = Record<'team' | 'sla' | 'problems' | 'fields', boolean | null>
 type StepKey = 'rubro' | 'servicios' | 'trabajo' | 'plazos' | 'equipo' | 'ticket'
 const STEP_NAME: Record<StepKey, string> = {
   rubro: 'Tu empresa',
@@ -19,10 +21,10 @@ const STEP_NAME: Record<StepKey, string> = {
   ticket: 'Primer ticket',
 }
 // Las horas y los días guardan el texto del input, como en Configuración: se ve exactamente lo escrito (también vacío).
-type Hours = Record<Priority, string>
+export type Hours = Record<Priority, string>
 
 // El estado que el backend suma al flujo si hay que esperar a quien reportó (WaitingRequester): pausa el SLA de resolución.
-const WAITING = 'Esperando al solicitante'
+export const WAITING = 'Esperando al solicitante'
 
 // Cada pregunta enciende o apaga una parte de la ticketera. `then` le cuenta al cliente qué significa su respuesta.
 type Question = { q: string; no: string; yes: string; then: [string, string] }
@@ -175,6 +177,8 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
   const [ans, setAns] = useState<Answers>({ team: null, sla: null, problems: null, fields: null })
   // Paso "Plazos": se precarga con la plantilla del rubro elegido.
   const [waits, setWaits] = useState<boolean | null>(null)
+  // Arrancar con los errores conocidos típicos del rubro (solo si los inconvenientes se repiten).
+  const [preload, setPreload] = useState(true)
   const [responseHours, setResponseHours] = useState<Hours>({ alta: '', media: '', baja: '' })
   const [autoCloseDays, setAutoCloseDays] = useState('')
   // Primer ticket: la prioridad sale de la matriz impacto × urgencia.
@@ -251,6 +255,7 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
       team: !!ans.team,
       sla: !!ans.sla,
       problems: !!ans.problems,
+      knownErrors: !!ans.problems && preload,
       fields: !!ans.fields,
       // Las horas de primera respuesta y la espera solo cuentan con plazos; el cierre automático, siempre.
       ...(ans.sla && { responseHours: hoursToSent(responseHours), waitsRequester: !!waits }),
@@ -374,6 +379,23 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                 {QUESTIONS.map(({ key: k, ...question }) => (
                   <YesNo key={k} {...question} value={ans[k]} onChange={(v) => setAns((a) => ({ ...a, [k]: v }))} />
                 ))}
+                {ans.problems && !!tpl?.knownErrors.length && (
+                  <section className="tx-side-card tx-solid onb-ke" aria-labelledby="onb-ke-h">
+                    <Check checked={preload} onChange={setPreload} label={`Arrancar con los errores conocidos típicos de ${tpl.industry.toLowerCase()}`} />
+                    <p className="tx-caption" id="onb-ke-h">
+                      Ya con su causa y su workaround: desde el primer día hay a qué vincular los tickets. Después los podés editar o cerrar.
+                    </p>
+                    {preload && (
+                      <ul className="onb-ke-list">
+                        {tpl.knownErrors.map((ke) => (
+                          <li key={ke.title}>
+                            <span className="tx-chip">{ke.service}</span> {ke.title}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )}
                 {nav(
                   <button type="button" className="tx-btn primary lg" disabled={!answered} onClick={() => go('plazos')}>
                     Continuar
@@ -480,7 +502,7 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                 <div>
                   <h1 className="tx-h1">Sumá a tu equipo</h1>
                   <p className="tx-muted">
-                    Tu plan incluye hasta {state.maxUsers} usuarios además del tuyo. Cada uno entra con su email y la contraseña que le definas acá. Si preferís,
+                    Tu plan incluye hasta {state.maxUsers} usuarios además del tuyo. A cada uno le generamos un link de invitación para que elija su contraseña. Si preferís,
                     hacelo después desde Configuración.
                   </p>
                 </div>
@@ -494,6 +516,7 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                           <div className="tx-caption">
                             {u.email} · {state.roles.find((r) => r.id === u.roleId)?.name}
                           </div>
+                          {u.invite && <InviteLink token={u.invite} />}
                         </div>
                         <button type="button" className="tx-btn ghost icon sm" aria-label={`Quitar a ${u.name}`} onClick={() => call(api.deleteUser(u.id))}>
                           <Ic n="trash" />
@@ -511,7 +534,7 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                       e.preventDefault()
                       const form = e.currentTarget
                       const f = fields(form)
-                      if (await call(api.addUser({ name: f.name, email: f.email, password: f.password, roleId: Number(f.roleId) }))) form.reset()
+                      if (await call(api.invite({ name: f.name, email: f.email, roleId: Number(f.roleId) }))) form.reset()
                     }}
                   >
                     <div className="tx-cols">
@@ -526,15 +549,6 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                           Email
                         </label>
                         <input id="ob-ue" name="email" type="email" className="tx-input" autoComplete="off" required />
-                      </div>
-                      <div className="tx-field">
-                        <label className="tx-label" htmlFor="ob-up">
-                          Contraseña inicial
-                        </label>
-                        <input id="ob-up" name="password" type="password" className="tx-input" autoComplete="new-password" minLength={8} aria-describedby="ob-up-h" required />
-                        <span className="tx-help" id="ob-up-h">
-                          Al menos 8 caracteres.
-                        </span>
                       </div>
                       <div className="tx-field">
                         <label className="tx-label" htmlFor="ob-ur">
@@ -672,168 +686,4 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
       </main>
     </div>
   )
-}
-
-const Sk = ({ w, h = 12 }: { w: number | string; h?: number }) => <span className="sk" style={{ width: w, height: h }} />
-
-// Vista previa: la ticketera que se va armando con cada respuesta. Lo que todavía no se decidió se ve como skeleton.
-function Preview(props: {
-  state: State
-  tpl?: Template
-  industry: string
-  services: string[]
-  ans: Answers
-  waits: boolean | null
-  responseHours: Hours
-  autoCloseDays: string
-  team: string[]
-}) {
-  const { tpl, ans, services } = props
-  const c = tpl?.config
-  // Misma regla que el backend (setup.go, Template.build): sin equipo quedan el primero y el último; si hay plazos y se
-  // espera a quien reportó, "Esperando al solicitante" va justo antes del último (si el flujo ya lo trae, queda donde está).
-  let states = c && ans.team !== null ? (ans.team ? c.states : [c.states[0], c.states[c.states.length - 1]]) : null
-  const waiting = !!(ans.sla && props.waits)
-  if (states && waiting && !states.includes(WAITING)) states = [...states.slice(0, -1), WAITING, states[states.length - 1]]
-  // Las horas se muestran como se van a guardar; vacías, con una raya.
-  const hours = (v: string) => {
-    const n = num(v)
-    return n === null ? '—' : `${n} h`
-  }
-  const menu = ['Panel', 'Incidentes', ...(ans.problems ? ['Problemas', 'Errores conocidos'] : []), 'Configuración']
-
-  return (
-    <aside className="onb-preview tx-glass" aria-label="Vista previa de tu ticketera">
-      <div>
-        <span className="tx-overline">Así va quedando</span>
-        <div className="tx-h3">{props.state.name}</div>
-        <div className="tx-caption">{props.industry.trim() || <Sk w={90} />}</div>
-      </div>
-
-      <div className="onb-pv-block">
-        <span className="tx-overline">Secciones</span>
-        <div className="onb-chips">
-          {menu.map((m) => (
-            <span key={m} className={`tx-chip ${m === 'Problemas' || m === 'Errores conocidos' ? 'onb-new' : ''}`}>
-              {m}
-            </span>
-          ))}
-          {ans.problems === null && <Sk w={70} h={24} />}
-        </div>
-      </div>
-
-      <div className="onb-pv-block">
-        <span className="tx-overline">Formulario de ticket</span>
-        <div className="onb-form tx-solid">
-          <div>
-            <div className="tx-caption">Qué está pasando</div>
-            <Sk w="100%" h={26} />
-          </div>
-          <div>
-            <div className="tx-caption">Servicio</div>
-            <div className="onb-chips">
-              {services.length ? (
-                <>
-                  {services.slice(0, 4).map((s) => (
-                    <span key={s} className="tx-chip">
-                      {s}
-                    </span>
-                  ))}
-                  {services.length > 4 && <span className="tx-caption">+{services.length - 4}</span>}
-                </>
-              ) : (
-                <Sk w="70%" h={24} />
-              )}
-            </div>
-          </div>
-          <div>
-            <div className="tx-caption">Prioridad{ans.sla && c && ' y vencimiento'}</div>
-            {ans.sla && c ? (
-              <div className="onb-sla">
-                <span />
-                <span className="tx-caption">Primera respuesta</span>
-                <span className="tx-caption">Resolución</span>
-                {PRIOS.map((p) => (
-                  <div key={p} style={{ display: 'contents' }}>
-                    <Prio p={p} />
-                    <span className="tx-caption">{hours(props.responseHours[p])}</span>
-                    <span className="tx-caption">{c.slaHours[p]} h</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="onb-chips">
-                {PRIOS.map((p) => (
-                  <Prio key={p} p={p} />
-                ))}
-              </div>
-            )}
-          </div>
-          {ans.fields === null ? (
-            <Sk w="55%" />
-          ) : (
-            ans.fields &&
-            c?.fields.map((f) => (
-              <div key={f.label} className="onb-new">
-                <div className="tx-caption">{f.label}</div>
-                <Sk w="100%" h={26} />
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="onb-pv-block">
-        <span className="tx-overline">Recorrido de un ticket</span>
-        <div className="onb-chips">
-          {states ? (
-            states.map((s, i, all) => (
-              <span key={s} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                {i > 0 && <Ic n="chevron" />}
-                <span className={`tx-badge ${i === all.length - 1 ? 'resuelto' : 'abierto'} ${waiting && s === WAITING ? 'onb-new' : ''}`}>
-                  {s}
-                  {waiting && s === WAITING && <Ic n="pause" />}
-                </span>
-              </span>
-            ))
-          ) : (
-            <>
-              <Sk w={70} h={24} />
-              <Sk w={70} h={24} />
-            </>
-          )}
-        </div>
-        {waiting && (
-          <span className="tx-caption onb-then onb-new">
-            <Ic n="pause" />
-            Detiene el plazo de resolución
-          </span>
-        )}
-      </div>
-
-      <div className="onb-pv-block">
-        <span className="tx-overline">Cierre automático</span>
-        {c ? <span className="tx-caption">{autoCloseText(props.autoCloseDays)}</span> : <Sk w={140} />}
-      </div>
-
-      {props.team.length > 0 && (
-        <div className="onb-pv-block onb-new">
-          <span className="tx-overline">Equipo</span>
-          <div className="onb-chips">
-            {props.team.map((n) => (
-              <span key={n} className="tx-avatar" title={n}>
-                {initials(n)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-    </aside>
-  )
-}
-
-// "2 días sin actividad"; vacío, con una raya (el backend lo va a rechazar al guardar).
-function autoCloseText(days: string) {
-  const n = num(days)
-  return n === null ? '— días sin actividad' : `${count(n, 'día')} sin actividad`
 }

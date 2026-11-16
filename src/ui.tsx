@@ -403,3 +403,20 @@ export function Dialog(props: {
     </dialog>
   )
 }
+
+// Casilla con el estilo del sistema de diseño (la nativa queda oculta pero accesible).
+export function Check(props: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string; hideLabel?: boolean }) {
+  return (
+    <label className={`tx-check ${props.checked ? 'is-on' : ''}`} style={props.disabled ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}>
+      <input
+        type="checkbox"
+        checked={props.checked}
+        disabled={props.disabled}
+        aria-label={props.hideLabel ? props.label : undefined}
+        onChange={(e) => props.onChange(e.target.checked)}
+      />
+      <span className="box">{props.checked && <Ic n="check" />}</span>
+      {!props.hideLabel && props.label}
+    </label>
+  )
+}
