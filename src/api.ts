@@ -115,6 +115,15 @@ export type Problem = {
   workaroundShared: boolean // quienes reportan lo ven al escribir un incidente parecido
   workaroundUses: { incidentId: number; at: string; userId: number; failed: boolean }[]
   deflections: number // tickets que no se abrieron porque alcanzó el workaround
+  review?: ProblemReview // revisión post-problema, una vez resuelto
+}
+
+export type ProblemReview = {
+  whatHappened: string
+  learned: string
+  actions: { text: string; ownerId: number; due: string; done: boolean }[]
+  at: string
+  userId: number
 }
 
 // Sugerencias por similitud de texto (ver Knowledge en el backend).
@@ -282,4 +291,6 @@ export const api = {
   applyWorkaround: (id: number, problemId: number) => t(`/incidents/${id}/workaround`, { problemId }),
   updateWorkaround: (id: number, text: string, shared: boolean) => t(`/problems/${id}/workaround`, { text, shared }, 'PUT'),
   deflect: (id: number) => t(`/problems/${id}/deflect`, {}),
+  saveReview: (id: number, r: Pick<ProblemReview, 'whatHappened' | 'learned' | 'actions'>) => t(`/problems/${id}/review`, r, 'PUT'),
+  setActionDone: (id: number, n: number, done: boolean) => t(`/problems/${id}/review/actions/${n}`, { done }, 'PUT'),
 }
