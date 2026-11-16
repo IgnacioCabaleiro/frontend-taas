@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { api, SLA_PERIODS, type SlaGroup, type SlaMetrics as Metrics, type SlaStat, type State } from './api'
 import { Ic, IncidentId, Prio, author, count, fmt, type Run } from './ui'
+import { SlaSimulator } from './Simulator'
 
 const pct = (v: number | null) => (v === null ? '—' : `${v}%`)
 const hours = (h: number | null) => (h === null ? '—' : `${h.toFixed(1)} h`)
@@ -64,6 +65,7 @@ export function SlaMetrics({ state, run, goIncident }: { state: State; run: Run;
       )}
       {!shown && !error && <div className="tx-inline-empty">Calculando métricas…</div>}
       {shown && <Content m={shown} state={state} goIncident={goIncident} />}
+      <SlaSimulator key={days} state={state} run={run} days={days} goIncident={goIncident} />
     </>
   )
 }
@@ -83,7 +85,7 @@ function Content({ m, state, goIncident }: { m: Metrics; state: State; goInciden
     <>
       <section className="tx-metrics kpi-row" aria-label="Indicadores de SLA del período">
         {kpis.map((k) => (
-          <div key={k.label} className="tx-metric tx-glass">
+          <div key={k.label} className="tx-metric tx-solid">
             <div className="lbl">
               <span className="dot" style={{ background: k.dot }} />
               {k.label}

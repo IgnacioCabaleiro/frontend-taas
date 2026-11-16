@@ -13,6 +13,7 @@ export type Setup = {
   sla: boolean
   problems: boolean
   fields: boolean
+  knownErrors?: boolean // arrancar con los errores conocidos típicos del rubro (solo con problems)
   // Opcionales: si no vienen, quedan los de la plantilla. Un número vacío viaja como null y el backend lo rechaza con su mensaje.
   responseHours?: Record<Priority, number | null> // solo se usan con sla
   waitsRequester?: boolean // solo con sla: suma "Esperando al solicitante", que pausa el SLA de resolución
@@ -40,7 +41,7 @@ export type Config = {
 export type RequestType = { name: string; hours: number }
 
 export type Role = { id: number; name: string; perms: Perm[]; locked: boolean }
-export type User = { id: number; name: string; email: string; roleId: number }
+export type User = { id: number; name: string; email: string; roleId: number; invite?: string } // invite: invitación pendiente (solo la ve quien configura)
 
 // Un ticket: un incidente (algo dejó de funcionar) o una solicitud de servicio (un pedido estándar del catálogo).
 // Las solicitudes vienen aparte, en State.requests: no tienen servicio, prioridad, impacto, urgencia ni problema
@@ -128,7 +129,18 @@ export type Problem = {
   workaroundUses: { incidentId: number; at: string; userId: number; failed: boolean }[]
   deflections: number // tickets que no se abrieron porque alcanzó el workaround
   review?: ProblemReview // revisión post-problema, una vez resuelto
+  swarm?: Swarm
+  preloaded: boolean // error conocido típico del rubro, cargado en el onboarding
 }
+
+// Simulador de SLA (ver SimulateSLA en el backend).
+export type SimStat = { measured: number; late: number; simLate: number }
+export type SimRow = { priority: string; resolution: SimStat; response: SimStat }
+export type SimResult = { days: number; total: SimRow; rows: SimRow[]; changes: { id: number; title: string; priority: Priority; kind: 'resolucion' | 'respuesta'; wasLate: boolean }[] }
+
+// Swarming: el equipo investiga un problema a la vez (ver Swarm en el backend).
+export type SwarmKind = 'pista' | 'descartado' | 'hallazgo'
+export type Swarm = { startedAt: string; startedBy: number; closedAt?: string; members: number[]; notes: { at: string; userId: number; kind: SwarmKind; text: string }[] }
 
 export type ProblemReview = {
   whatHappened: string
@@ -162,6 +174,7 @@ export type State = {
   requests: Incident[] // las solicitudes de servicio, aparte
   problems: Problem[]
   suggestions: { service: string; incidentIds: number[] }[]
+  crossSuggestions: { terms: string[]; incidentIds: number[]; services: string[] }[] // el mismo síntoma en servicios distintos
 }
 
 // Métricas de SLA (GET /metrics/sla): sobre los incidentes creados en el período. Un porcentaje null = todavía no hay nada que medir.
@@ -188,7 +201,8 @@ export type SlaMetrics = {
 }
 export const SLA_PERIODS = [7, 30, 90] as const
 
-export type Template = { key: string; industry: string; config: Config }
+export type KnownErrorSeed = { service: string; title: string; rootCause: string; workaround: string }
+export type Template = { key: string; industry: string; config: Config; knownErrors: KnownErrorSeed[] }
 
 // La sesión es un token que se guarda en el navegador; si el storage no está disponible, dura lo que la pestaña.
 // Junto al token se recuerdan la cuenta y el usuario (0 = todavía no se sabe), para que al salir con la sesión vencida,
@@ -304,6 +318,15 @@ export const api = {
   applyWorkaround: (id: number, problemId: number) => t(`/incidents/${id}/workaround`, { problemId }),
   updateWorkaround: (id: number, text: string, shared: boolean) => t(`/problems/${id}/workaround`, { text, shared }, 'PUT'),
   deflect: (id: number) => t(`/problems/${id}/deflect`, {}),
+  simulateSla: (input: { days: number; slaHours: Record<Priority, number>; responseHours: Record<Priority, number> }) =>
+    request<SimResult>('/metrics/sla/simulate', 'POST', input),
+  startSwarm: (id: number) => t(`/problems/${id}/swarm`, {}),
+  joinSwarm: (id: number) => t(`/problems/${id}/swarm/join`, {}),
+  swarmNote: (id: number, kind: SwarmKind, text: string) => t(`/problems/${id}/swarm/notes`, { kind, text }),
+  closeSwarm: (id: number) => t(`/problems/${id}/swarm/close`, {}),
+  invite: (u: { name: string; email: string; roleId: number }) => t('/invitations', u),
+  invitation: (token: string) => request<{ name: string; email: string; company: string }>(`/invitations/${token}`),
+  acceptInvite: (token: string, password: string) => request<{ token: string }>(`/invitations/${token}/accept`, 'POST', { password }),
   saveReview: (id: number, r: Pick<ProblemReview, 'whatHappened' | 'learned' | 'actions'>) => t(`/problems/${id}/review`, r, 'PUT'),
   setActionDone: (id: number, n: number, done: boolean) => t(`/problems/${id}/review/actions/${n}`, { done }, 'PUT'),
 }

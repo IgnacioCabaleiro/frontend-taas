@@ -131,7 +131,7 @@ export function Incidents(props: {
         )}
         <form
           key={formKey}
-          className="tx-inline-form tx-glass"
+          className="tx-inline-form tx-solid"
           aria-label="Crear incidente"
           noValidate
           onInput={(e) => {

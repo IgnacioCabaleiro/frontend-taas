@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Problem, type State } from './api'
 import { WorkaroundPanel } from './Knowledge'
 import { ImpactStrip, ReviewPanel, impact } from './Review'
+import { SwarmPanel } from './Swarm'
 import { A, Dialog, FieldError, Filters, Ic, IncStage, IncidentId, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, can, count, fields, fmt, userName, usersWith, type Run } from './ui'
 
 export function Board({ state, run, open }: { state: State; run: Run; open: (id: number) => void }) {
@@ -27,7 +28,7 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
     <>
       <section className="tx-metrics" aria-label="Métricas">
         {metrics.map((m) => (
-          <div key={m.label} className="tx-metric tx-glass">
+          <div key={m.label} className="tx-metric tx-solid">
             <div className="lbl">
               <span className="dot" style={{ background: m.dot }} />
               {m.label}
@@ -39,7 +40,7 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
       </section>
 
       {suggestions.length > 0 && (
-        <section className="tx-reco tx-glass" aria-labelledby="reco">
+        <section className="tx-reco tx-solid" aria-labelledby="reco">
           <div className="tx-reco-head">
             <div className="tx-reco-ic">
               <Ic n="recur" size="lg" />
@@ -80,6 +81,62 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
                     setCreating(sg.service)
                     const s = await run(
                       api.createProblem({ title: `Incidentes recurrentes en ${sg.service}`, service: sg.service, incidentIds: sg.incidentIds }),
+                    )
+                    setCreating('')
+                    if (s) open(s.problems[s.problems.length - 1].id)
+                  }}
+                >
+                  <Ic n="plus" />
+                  Abrir problema
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {state.crossSuggestions.length > 0 && (
+        <section className="tx-reco tx-solid radar" aria-labelledby="radar-h">
+          <div className="tx-reco-head">
+            <div className="tx-reco-ic">
+              <Ic n="target" size="lg" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <h2 className="tx-h3" id="radar-h">
+                El mismo síntoma en servicios distintos
+              </h2>
+              <p className="tx-muted" style={{ fontSize: 13 }}>
+                Mirando servicio por servicio no se ve: estos incidentes cuentan lo mismo. Suele ser una causa compartida.
+              </p>
+            </div>
+          </div>
+          <div className="tx-reco-list">
+            {state.crossSuggestions.map((cs) => (
+              <div key={cs.incidentIds.join('-')} className="tx-reco-row">
+                <div>
+                  <div className="svc">«{cs.terms.join(' · ')}»</div>
+                  <div className="tx-caption">{cs.services.join(', ')}</div>
+                </div>
+                <div className="n">{count(cs.incidentIds.length, 'incidente')}</div>
+                <div className="ids">
+                  {cs.incidentIds.map((id) => (
+                    <span key={id} className="tx-chip">
+                      #{id}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  className="tx-btn primary"
+                  disabled={creating !== ''}
+                  onClick={async () => {
+                    setCreating(cs.incidentIds.join('-'))
+                    const s = await run(
+                      api.createProblem({
+                        title: `Síntoma común: ${cs.terms.slice(0, 3).join(', ')}`,
+                        description: `Se repite en ${cs.services.join(', ')}.`,
+                        service: cs.services[0],
+                        incidentIds: cs.incidentIds,
+                      }),
                     )
                     setCreating('')
                     if (s) open(s.problems[s.problems.length - 1].id)
@@ -175,10 +232,9 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
 const PANEL_TITLE = ['Problema identificado', 'Análisis de causa raíz', 'Error conocido', 'Problema resuelto']
 
 export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem; state: State; run: Run; back: () => void; goIncident?: (id: number) => void }) {
-  const { users, config } = state
+  const { users } = state
   const canResolve = can(state, 'resolver')
   const incidents = state.incidents.filter((i) => i.problemId === p.id)
-  const resolvedState = config.states[config.states.length - 1]
   const step = STEPS.indexOf(p.status)
   const abiertos = incidents.filter((i) => !i.resolvedAt).length
   const [invalid, setInvalid] = useState(false)
@@ -218,7 +274,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
         <Ic n="back" />
         Volver a problemas
       </A>
-      <header className="tx-detail-head tx-glass" style={{ marginTop: -12 }}>
+      <header className="tx-detail-head tx-solid" style={{ marginTop: -12 }}>
         <div className="meta">
           <span className="tx-id" style={{ fontSize: 14 }}>
             P-{p.id}
@@ -247,7 +303,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
         <ImpactStrip p={p} state={state} />
       </header>
 
-      <ol className="tx-stepper tx-glass" aria-label="Etapas del problema">
+      <ol className="tx-stepper tx-solid" aria-label="Etapas del problema">
         {STEPS.map((s, i) => {
           const done = i < step || step === 3
           return (
@@ -301,6 +357,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
                 id="rc"
                 name="rootCause"
                 className="tx-textarea"
+                defaultValue={(p.swarm?.notes ?? []).filter((n) => n.kind === 'hallazgo').map((n) => n.text).join('\n')}
                 aria-invalid={invalid || undefined}
                 aria-describedby={invalid ? 'rc-e' : 'rc-h'}
                 placeholder="¿Qué provoca los incidentes? Ej.: el servidor de base de datos se queda sin memoria al cierre de mes."
@@ -386,7 +443,8 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
         )}
 
         <div className="tx-side-panel">
-          <section className="tx-side-card tx-glass">
+          <SwarmPanel p={p} state={state} run={run} />
+          <section className="tx-side-card tx-solid">
             <div className="tx-section-head" style={{ margin: 0 }}>
               <h3 className="tx-h3">Incidentes vinculados</h3>
               <span className="tx-count">{incidents.length}</span>
@@ -424,7 +482,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
             )}
           </section>
 
-          <section className="tx-side-card tx-glass">
+          <section className="tx-side-card tx-solid">
             <h3 className="tx-h3">Historial</h3>
             <form
               className="cfg-line"

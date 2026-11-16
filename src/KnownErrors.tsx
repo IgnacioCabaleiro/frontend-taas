@@ -43,31 +43,31 @@ export function KnownErrors({ state, goProblem, goIncidents }: { state: State; g
   return (
     <>
       <section className="tx-metrics" aria-label="Rendimiento de la base de errores conocidos">
-        <div className="tx-metric tx-glass">
+        <div className="tx-metric tx-solid">
           <div className="lbl">Errores conocidos vigentes</div>
           <div className="val">{lists.vigentes.length}</div>
           <div className="foot">{count(lists.compartidos.length, 'compartido', 'compartidos')} con quienes reportan</div>
         </div>
-        <div className="tx-metric tx-glass">
+        <div className="tx-metric tx-solid">
           <div className="lbl">Resueltos con workaround</div>
           <div className="val">{recent.length ? `${Math.round((byWorkaround * 100) / recent.length)}%` : '—'}</div>
           <div className="foot">
             {byWorkaround} de {count(recent.length, 'incidente resuelto', 'incidentes resueltos')} en 30 días
           </div>
         </div>
-        <div className="tx-metric tx-glass">
+        <div className="tx-metric tx-solid">
           <div className="lbl">Efectividad de los workarounds</div>
           <div className="val">{effective === null ? '—' : `${effective}%`}</div>
           <div className="foot">usos que no terminaron en reapertura</div>
         </div>
-        <div className="tx-metric tx-glass">
+        <div className="tx-metric tx-solid">
           <div className="lbl">Tickets evitados</div>
           <div className="val">{deflected}</div>
           <div className="foot">a quien reportó le alcanzó el workaround</div>
         </div>
       </section>
 
-      <label className="tx-search tx-glass">
+      <label className="tx-search tx-solid">
         <Ic n="search" size="lg" />
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por síntoma, servicio o causa" aria-label="Buscar en errores conocidos" />
       </label>
@@ -83,7 +83,7 @@ export function KnownErrors({ state, goProblem, goIncidents }: { state: State; g
       />
 
       {shown.length === 0 ? (
-        <section className="tx-glass" style={{ borderRadius: 'var(--radius-xl)' }}>
+        <section className="tx-solid" style={{ borderRadius: 'var(--radius-xl)' }}>
           <div className="tx-empty">
             <div className="tx-empty-ic tx-glass-strong">
               <Ic n="search" size="xl" />

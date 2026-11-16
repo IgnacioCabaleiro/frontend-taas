@@ -1,7 +1,8 @@
 // Panel de visualización. Todo se calcula en el cliente a partir del estado de la empresa.
+// El cumplimiento de SLA vive en su propia pestaña (lo calcula el backend, con pausas y versiones): acá no se repite.
 import { useState } from 'react'
-import type { Incident, Priority, State } from './api'
-import { Filters, ProblemId, STATUS, STEPS, StatusBadge, count, isLate, isResponseLate } from './ui'
+import type { Incident, State } from './api'
+import { Filters, ProblemId, STATUS, STEPS, StatusBadge, count, isLate } from './ui'
 
 // Las 00:00 de hace n días. setDate (y no restar 24 h) evita correrse una hora con el cambio de horario.
 const midnight = (n: number) => {
@@ -10,20 +11,17 @@ const midnight = (n: number) => {
   d.setDate(d.getDate() - n)
   return d
 }
-const PRIOS: Priority[] = ['alta', 'media', 'baja']
 const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : null)
 const show = (v: number | null, unit = '%') => (v === null ? '—' : `${v}${unit}`)
 // SLA medible: incidentes ya resueltos, más los abiertos que ya vencieron.
 const judged = (list: Incident[]) => list.filter((i) => i.resolvedAt || isLate(i))
-// Primera respuesta medible: la que ya llegó, más la que ya venció sin llegar.
-const judgedResponse = (list: Incident[]) => list.filter((i) => i.responseDueAt && (i.firstResponseAt || isResponseLate(i)))
 const avgHours = (list: number[]) => (list.length ? list.reduce((a, b) => a + b, 0) / list.length : null)
 const showHours = (h: number | null) => (h === null ? '—' : `${h.toFixed(1)} h`)
 type Kpi = { on: boolean; label: string; dot: string; val: string; foot: string }
 
 export function Dashboard({ state, openProblem }: { state: State; openProblem?: (id: number) => void }) {
   const { sla, problems: withProblems } = state.config.modules
-  const [period, setPeriod] = useState<'7' | '14' | '30'>('30')
+  const [period, setPeriod] = useState<'7' | '30' | '90'>('30')
   const days = Number(period)
   // Desde las 00:00 de hace (n - 1) días: el mismo corte para los contadores del filtro y para los indicadores.
   const start = midnight(days - 1)
@@ -35,8 +33,6 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
   }
 
   const resolved = inc.filter((i) => i.resolvedAt)
-  const measurable = judged(inc)
-  const lateCount = measurable.filter(isLate).length
   const mttr = avgHours(resolved.map((i) => (+new Date(i.resolvedAt!) - +new Date(i.createdAt)) / 36e5))
   const responded = inc.filter((i) => i.firstResponseAt)
   const mtfr = avgHours(responded.map((i) => (+new Date(i.firstResponseAt!) - +new Date(i.createdAt)) / 36e5))
@@ -47,8 +43,7 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
   const happy = rated.filter((i) => i.rating >= 4).length
   const avgRating = rated.length ? (rated.reduce((n, i) => n + i.rating, 0) / rated.length).toFixed(1) : null
 
-  // Hasta ocho indicadores en dos filas: volumen y tiempos. Los de SLA y de causa investigada solo existen
-  // si la cuenta tiene esos módulos.
+  // Hasta siete indicadores en dos filas: volumen y tiempos. El de causa investigada solo existe con gestión de problemas.
   const rows: Kpi[][] = [
     [
       { on: true, label: 'Incidentes', dot: 'var(--viz-1)', val: String(inc.length), foot: `${inc.length - resolved.length} siguen abiertos` },
@@ -57,7 +52,6 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
       { on: true, label: 'Reabiertos', dot: 'var(--status-conocido-dot)', val: String(reopened), foot: `${show(pct(reopened, inc.length))} de los del período` },
     ],
     [
-      { on: sla, label: 'Cumplimiento de SLA', dot: 'var(--status-resuelto-dot)', val: show(pct(measurable.length - lateCount, measurable.length)), foot: `${lateCount} fuera de SLA de resolución` },
       { on: true, label: 'Tiempo medio de primera respuesta', dot: 'var(--brand)', val: showHours(mtfr), foot: `sobre ${count(responded.length, 'respondido')}` },
       { on: true, label: 'Tiempo medio de resolución', dot: 'var(--ink-subtle)', val: showHours(mttr), foot: `sobre ${count(resolved.length, 'resuelto')}` },
       { on: withProblems, label: 'Con causa investigada', dot: 'var(--viz-2)', val: show(pct(investigated, inc.length)), foot: `${inc.length - investigated} sin problema asociado` },
@@ -75,7 +69,7 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
     }
   })
   const maxDay = Math.max(1, ...perDay.map((d) => d.n))
-  const every = days <= 7 ? 1 : days <= 14 ? 2 : 5
+  const every = days <= 7 ? 1 : days <= 30 ? 5 : 15
 
   // Dónde se concentran: por servicio, separando lo que ya tiene un problema asociado.
   const perService = state.config.services
@@ -87,15 +81,6 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
     .filter((r) => r.total)
     .sort((a, b) => b.total - a.total)
   const maxService = Math.max(1, ...perService.map((r) => r.total))
-
-  const perPrio = PRIOS.map((p) => {
-    const list = judged(inc.filter((i) => i.priority === p))
-    return { p, ok: list.filter((i) => !isLate(i)).length, total: list.length }
-  })
-  const perPrioResponse = PRIOS.map((p) => {
-    const list = judgedResponse(inc.filter((i) => i.priority === p))
-    return { p, ok: list.filter((i) => !isResponseLate(i)).length, total: list.length }
-  })
 
   // El efecto sandía: servicios que cumplen el SLA (verde por fuera) con la gente disconforme (rojo por dentro).
   const melon = state.config.services
@@ -139,15 +124,15 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
         onChange={setPeriod}
         options={[
           ['7', 'Últimos 7 días', inLast(7)],
-          ['14', '14 días', inLast(14)],
           ['30', '30 días', inLast(30)],
+          ['90', '90 días', inLast(90)],
         ]}
       />
 
       {rows.map((row, r) => (
         <section key={r} className="tx-metrics kpi-row" aria-label={r === 0 ? 'Volumen del período' : 'Tiempos del período'} style={r ? { marginTop: -8 } : undefined}>
           {row.map((m) => (
-            <div key={m.label} className="tx-metric tx-glass">
+            <div key={m.label} className="tx-metric tx-solid">
               <div className="lbl">
                 <span className="dot" style={{ background: m.dot }} />
                 {m.label}
@@ -322,17 +307,6 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
           )}
         </section>
 
-        {sla && (
-        <section className="viz-card tx-solid">
-          <div>
-            <h2 className="tx-h3">Cumplimiento de SLA por prioridad</h2>
-            <p className="tx-caption">A tiempo sobre lo ya medible: lo que llegó y lo que venció sin llegar.</p>
-          </div>
-          <SlaRows title="Primera respuesta" rows={perPrioResponse} hours={state.config.responseHours} />
-          <SlaRows title="Resolución" rows={perPrio} hours={state.config.slaHours} />
-        </section>
-        )}
-
         {withProblems && (
         <section className="viz-card tx-solid">
           <div>
@@ -398,32 +372,5 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
       </section>
       )}
     </>
-  )
-}
-
-// Una fila por prioridad: cuántos se cumplieron a tiempo, sobre cuántos ya se pueden medir.
-function SlaRows({ title, rows, hours }: { title: string; rows: { p: Priority; ok: number; total: number }[]; hours: Record<Priority, number> }) {
-  return (
-    <div className="tx-stack" style={{ gap: 8 }}>
-      <span className="tx-overline">{title}</span>
-      <div className="viz-rows">
-        {rows.map((r) => {
-          const v = pct(r.ok, r.total)
-          return (
-            <div key={r.p} style={{ display: 'contents' }}>
-              <span className="lbl">
-                {r.p[0].toUpperCase() + r.p.slice(1)} · {hours[r.p]} h
-              </span>
-              <div className="viz-track meter" title={`${title}: ${r.ok} de ${r.total} a tiempo`}>
-                {v !== null && v > 0 && <div className="viz-seg" style={{ width: `${v}%`, background: 'var(--viz-1)', borderRadius: 4 }} />}
-              </div>
-              <span className="val">
-                {show(v)} <small>{r.ok}/{r.total}</small>
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    </div>
   )
 }
