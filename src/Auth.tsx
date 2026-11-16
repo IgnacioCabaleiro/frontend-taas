@@ -1,7 +1,7 @@
 // Ingreso y alta de cuenta (la contratación).
 import { useState } from 'react'
 import { api, session } from './api'
-import { FieldError, fields } from './ui'
+import { FieldError, Logo, fields } from './ui'
 
 export function Auth({ onEnter }: { onEnter: () => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
@@ -27,16 +27,17 @@ export function Auth({ onEnter }: { onEnter: () => void }) {
         }}
       >
         <div>
-          <div className="tx-brand" style={{ padding: 0 }}>
+          <div className="tx-brand auth-brand">
+            <Logo size={30} />
             <b>TaaS</b>
-            <span>· Ticketera configurable</span>
+            <span>Arreglalo una vez.</span>
           </div>
           <h1 className="tx-h2" style={{ marginTop: 12 }}>
             {mode === 'login' ? 'Ingresá a tu ticketera' : 'Creá la cuenta de tu empresa'}
           </h1>
           <p className="tx-muted" style={{ fontSize: 13 }}>
             {mode === 'login'
-              ? 'Usá el email y la contraseña que te dio el titular de la cuenta.'
+              ? 'Con tu email de trabajo.'
               : 'Vas a ser el titular: después configurás la ticketera y sumás hasta 5 usuarios.'}
           </p>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, session, type Perm, type State } from './api'
-import { A, Ic, can, initials, type Run } from './ui'
+import { A, Ic, Logo, can, count, initials, isLate, type Run } from './ui'
 import { Auth } from './Auth'
 import { Onboarding, clearOnboardingDraft } from './Onboarding'
 import { Dashboard } from './Dashboard'
@@ -13,14 +13,48 @@ import { Settings } from './Settings'
 import { SKELETON } from './Skeletons'
 
 const TABS = {
-  panel: { nav: 'Panel', icon: 'chart', title: 'Panel', sub: 'Qué está pasando: volumen, tiempos y dónde se concentran los incidentes.' },
-  sla: { nav: 'SLA', icon: 'clock', title: 'Métricas de SLA', sub: 'Cuánto se cumplen los plazos de respuesta y resolución, dónde fallan y qué está por vencer.' },
-  problemas: { nav: 'Problemas', icon: 'target', title: 'Problemas', sub: 'Detectá incidentes recurrentes, investigá la causa y cerrá todo junto.' },
-  incidentes: { nav: 'Incidentes', icon: 'alert', title: 'Incidentes', sub: 'Registrá lo que está pasando y seguí cada ticket hasta que se resuelve.' },
-  kedb: { nav: 'Errores conocidos', icon: 'book', title: 'Errores conocidos', sub: 'La base de conocimiento del equipo: causas raíz, workarounds y soluciones.' },
-  config: { nav: 'Configuración', icon: 'gear', title: 'Configuración', sub: 'Adaptá la ticketera a tu empresa y decidí qué puede hacer cada persona.' },
+  panel: { nav: 'Panel', icon: 'chart', title: 'Panel', slug: 'panel' },
+  sla: { nav: 'SLA', icon: 'clock', title: 'Métricas de SLA', slug: 'sla' },
+  problemas: { nav: 'Problemas', icon: 'target', title: 'Problemas', slug: 'problemas' },
+  incidentes: { nav: 'Incidentes', icon: 'alert', title: 'Incidentes', slug: 'incidentes' },
+  kedb: { nav: 'Errores conocidos', icon: 'book', title: 'Errores conocidos', slug: 'errores-conocidos' },
+  config: { nav: 'Configuración', icon: 'gear', title: 'Configuración', slug: 'configuracion' },
 } as const
 export type Tab = keyof typeof TABS
+
+// La ruta vive en el hash (#/incidentes/42): se puede compartir, recargar y usar Atrás.
+function parseHash(): { tab: Tab; id: number } {
+  const [, slug = '', id = ''] = location.hash.split('/')
+  const tab = (Object.keys(TABS) as Tab[]).find((t) => TABS[t].slug === slug) ?? 'panel'
+  return { tab, id: Number(id) || 0 }
+}
+const navigate = (t: Tab, id = 0) => {
+  location.hash = `/${TABS[t].slug}${id ? `/${id}` : ''}`
+}
+
+// Lo que se lee debajo del título: el estado de la sección en una línea.
+function headline(t: Tab, s: State) {
+  const open = s.incidents.filter((i) => !i.resolvedAt)
+  switch (t) {
+    case 'incidentes': {
+      const parts = [count(open.length, 'abierto', 'abiertos')]
+      const late = open.filter(isLate).length
+      const free = open.filter((i) => !i.assigneeId).length
+      if (late) parts.push(count(late, 'vencido', 'vencidos'))
+      if (free) parts.push(`${free} sin asignar`)
+      return parts.join(' · ')
+    }
+    case 'problemas': {
+      const active = s.problems.filter((p) => p.status !== 'resuelto').length
+      const known = s.problems.filter((p) => p.status === 'error_conocido').length
+      return `${count(active, 'activo', 'activos')} · ${count(known, 'error conocido', 'errores conocidos')}${s.suggestions.length ? ` · ${count(s.suggestions.length, 'recurrencia', 'recurrencias')} sin investigar` : ''}`
+    }
+    case 'config':
+      return `${s.industry} · ${s.users.length} de ${s.maxUsers + 1} usuarios${s.configVersions.length ? ` · versión ${s.configVersions.length}` : ''}`
+    default:
+      return ''
+  }
+}
 
 // Qué secciones ve cada usuario: según los permisos de su rol y los módulos activos de la cuenta.
 function allowedTabs(s: State): Tab[] {
@@ -48,8 +82,15 @@ const storedTheme = () => {
 export default function App() {
   const [logged, setLogged] = useState(session.active())
   const [state, setState] = useState<State | null>(null)
-  const [tab, setTab] = useState<Tab>('panel')
-  const [openId, setOpenId] = useState(0) // problema o incidente abierto en su sección (0 = la lista)
+  const [route, setRoute] = useState(parseHash)
+  useEffect(() => {
+    const sync = () => setRoute(parseHash())
+    addEventListener('hashchange', sync)
+    return () => removeEventListener('hashchange', sync)
+  }, [])
+  const { tab, id: openId } = route // problema o incidente abierto en su sección (0 = la lista)
+  const setTab = (t: Tab) => navigate(t)
+  const setOpenId = (id: number) => navigate(route.tab, id)
   const [related, setRelated] = useState(0) // incidente cerrado desde el que se registra uno relacionado
   const [modal, setModal] = useState(false)
   const [error, setError] = useState<{ message: string; offline: boolean } | null>(null)
@@ -99,8 +140,7 @@ export default function App() {
       return null
     }
   }
-  // ponytail: demora mínima solo para que el skeleton se vea en la demo (el backend local responde en ms). Borrar con backend real.
-  const load = () => run(Promise.all([api.state(), new Promise((r) => setTimeout(r, 600))]).then(([s]) => s))
+  const load = () => run(api.state())
   useEffect(() => {
     if (logged) load()
   }, [logged])
@@ -112,8 +152,7 @@ export default function App() {
   const tabs = state ? allowedTabs(state) : []
   const current = !state || tabs.includes(tab) ? tab : (tabs[0] ?? 'incidentes')
   const go = (t: Tab, id = 0) => {
-    setTab(t)
-    setOpenId(id)
+    navigate(t, id)
     setRelated(0)
   }
   const goProblem = tabs.includes('problemas') ? (id: number) => go('problemas', id) : undefined
@@ -130,14 +169,16 @@ export default function App() {
     : {}
   const T = TABS[current]
   const Skeleton = SKELETON[current]
+  const sub = state ? headline(current, state) : ''
+  document.title = openInc ? `#${openInc.id} ${openInc.title} · TaaS` : open ? `P-${open.id} ${open.title} · TaaS` : `${T.title} · TaaS`
 
   return (
     <div className="tx-canvas">
       <div className="tx-app">
         <aside className="tx-side tx-glass" aria-label="Navegación principal">
-          <div className="tx-brand" style={{ paddingBottom: 6 }}>
+          <div className="tx-brand side-brand">
+            <Logo size={26} />
             <b>TaaS</b>
-            <span>· Ticketera configurable</span>
           </div>
           <div className="side-org" style={{ padding: '0 10px 16px' }}>
             <div className="tx-strong">{state?.name ?? ' '}</div>
@@ -178,7 +219,7 @@ export default function App() {
             <header className="tx-top">
               <div>
                 <h1 className="tx-h1">{T.title}</h1>
-                <p>{T.sub}</p>
+                {sub && <p>{sub}</p>}
               </div>
               <div className="tx-row">
                 {current === 'problemas' && (
@@ -223,7 +264,7 @@ export default function App() {
                   <Ic n="offline" size="xl" />
                 </div>
                 <h2 className="tx-h2">No pudimos conectar con el servidor</h2>
-                <p>Revisá que el backend esté corriendo en localhost:8080 y volvé a intentar.</p>
+                <p>Revisá tu conexión y volvé a intentar.</p>
                 <div className="tx-actions">
                   <button className="tx-btn primary" onClick={load}>
                     <Ic n="retry" />

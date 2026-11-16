@@ -36,6 +36,11 @@ export function Incidents(props: {
   type Filter = 'abiertos' | 'mios' | 'vencidos' | 'pausa' | 'sin' | 'resueltos' | 'cerrados' | 'todos'
   const [filter, setFilter] = useState<Filter>('abiertos')
   const [busy, setBusy] = useState(false)
+  const [q, setQ] = useState('')
+  type Sort = 'urgentes' | 'recientes' | 'antiguos'
+  const [sort, setSort] = useState<Sort>('urgentes')
+  // Quien atiende vive en la lista: el alta se abre con un botón. Quien solo reporta entra a cargar.
+  const [composing, setComposing] = useState(!canResolve || related > 0)
 
   const active = problems.filter((p) => p.status !== 'resuelto')
   // Si el servicio ya tiene un problema activo, se ofrece su workaround al cargar el incidente.
@@ -62,6 +67,20 @@ export function Incidents(props: {
     todos: incidents,
   }
 
+  const PRIO_RANK = { alta: 0, media: 1, baja: 2 }
+  const due = (i: (typeof incidents)[number]) => (i.dueAt ? +new Date(i.dueAt) : Infinity)
+  const needle = q.trim().toLowerCase().replace(/^#/, '')
+  const rows = lists[filter]
+    .filter((i) =>
+      !needle ? true : [String(i.id), i.title, i.service, i.status, userName(users, i.assigneeId, '')].join(' ').toLowerCase().includes(needle),
+    )
+    .sort((a, b) => {
+      if (sort === 'recientes') return b.id - a.id
+      if (sort === 'antiguos') return a.id - b.id
+      // Urgentes: vencidos primero, después lo que vence antes y, a igual vencimiento, la mayor prioridad.
+      return Number(isLate(b)) - Number(isLate(a)) || due(a) - due(b) || PRIO_RANK[a.priority] - PRIO_RANK[b.priority] || b.id - a.id
+    })
+
   // Los filtros dependen de lo que el usuario puede hacer y de cómo trabaja la cuenta.
   const options = (
     [
@@ -80,8 +99,25 @@ export function Incidents(props: {
 
   return (
     <>
-      {canCreate && (
+      {canCreate && !composing && (
+        <div className="tx-row">
+          <button type="button" className="tx-btn primary" onClick={() => setComposing(true)}>
+            <Ic n="plus" />
+            Nuevo incidente
+          </button>
+          {deflected && <span className="tx-caption">A quien reportó le alcanzó el workaround de «{deflected}».</span>}
+        </div>
+      )}
+      {canCreate && composing && (
       <section className="tx-stack" style={{ gap: 12 }}>
+        {canResolve && (
+          <div className="tx-row" style={{ justifyContent: 'space-between' }}>
+            <h2 className="tx-h3">Nuevo incidente</h2>
+            <button type="button" className="tx-btn ghost sm" onClick={() => setComposing(false)}>
+              Cancelar
+            </button>
+          </div>
+        )}
         {related > 0 && (
           <div className="tx-row" style={{ gap: 8 }}>
             <span className="tx-mark">
@@ -149,6 +185,7 @@ export function Incidents(props: {
               setDraft('')
               setLinkTo(0)
               setApplyNow(false)
+              if (canResolve) setComposing(false)
             }
           }}
         >
@@ -388,8 +425,22 @@ export function Incidents(props: {
           <h2 className="tx-h3">{canResolve ? 'Incidentes' : 'Mis incidentes'}</h2>
           <Filters value={filter} onChange={setFilter} options={options} />
         </div>
-        {lists[filter].length === 0 ? (
-          <div className="tx-inline-empty">No hay incidentes en este filtro.</div>
+        <div className="inc-tools">
+          <label className="inc-search">
+            <Ic n="search" />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por #, título, servicio o persona" aria-label="Buscar incidentes" />
+          </label>
+          <label className="inc-sort">
+            <span className="tx-caption">Ordenar</span>
+            <select className="tx-input" value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Ordenar incidentes">
+              <option value="urgentes">Lo más urgente primero</option>
+              <option value="recientes">Más recientes</option>
+              <option value="antiguos">Más antiguos</option>
+            </select>
+          </label>
+        </div>
+        {rows.length === 0 ? (
+          <div className="tx-inline-empty">{needle ? `Ningún incidente coincide con «${q.trim()}».` : 'No hay incidentes en este filtro.'}</div>
         ) : (
           <div className="tx-table-wrap tx-solid">
             <table className="tx-table">
@@ -405,7 +456,7 @@ export function Incidents(props: {
                 </tr>
               </thead>
               <tbody>
-                {[...lists[filter]].reverse().map((i) => (
+                {rows.map((i) => (
                   <tr key={i.id}>
                     <td className="w-id" data-label="ID">
                       <IncidentId id={i.id} go={open} />

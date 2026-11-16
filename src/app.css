@@ -19,7 +19,7 @@ select.tx-input { cursor: pointer; }
 .tx-clickable { cursor: pointer; }
 
 /* ---------- Panel: gráficos ----------
-   Serie 1 y 2 de la paleta categórica validada (skill dataviz), con su paso propio para tema oscuro.
+   Paleta de gráficos: dos series, con variante para el tema oscuro.
    Los colores de estado del sistema quedan reservados para estados. */
 :root { --viz-1: #2a78d6; --viz-2: #eb6834; }
 [data-theme="dark"] { --viz-1: #3987e5; --viz-2: #d95926; }
@@ -283,3 +283,19 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
 .kn-stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; font-size: 13px; color: var(--ink-muted); }
 .kn-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .kn-stats .kn-low b { color: var(--danger-fg); }
+
+/* ---------- Marca ---------- */
+.tx-logo { flex: none; color: var(--brand); }
+.side-brand { align-items: center; gap: 8px; padding: 2px 10px 14px; }
+.side-brand b { font-size: 20px; }
+.auth-brand { align-items: center; gap: 8px; padding: 0; }
+.auth-brand b { font-size: 22px; }
+.auth-brand span { margin-left: 6px; color: var(--ink-muted); font-size: 13px; }
+
+/* ---------- Lista de incidentes ---------- */
+.inc-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.inc-search { flex: 1; min-width: 220px; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: var(--radius-md); background: var(--surface-solid); border: 1px solid var(--control-border); color: var(--ink-subtle); }
+.inc-search:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px var(--brand-tint); }
+.inc-search input { flex: 1; border: 0; background: none; outline: none; height: 100%; color: var(--ink); font-size: 14px; }
+.inc-sort { display: flex; align-items: center; gap: 8px; }
+.inc-sort .tx-input { width: auto; }

@@ -3,7 +3,7 @@
 // mostrándole a la derecha cómo va quedando.
 import { useEffect, useState, type ReactNode } from 'react'
 import { api, type Priority, type Setup, type State, type Template } from './api'
-import { FieldError, Ic, LevelPicker, Prio, count, fields, hoursToDraft, hoursToSent, initials, num, priorityFor, type Run } from './ui'
+import { FieldError, Ic, LevelPicker, Logo, Prio, count, fields, hoursToDraft, hoursToSent, initials, num, priorityFor, type Run } from './ui'
 import { ListEditor } from './Settings'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
@@ -282,7 +282,8 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
     <div className="tx-canvas">
       <main className="onb">
         <header className="onb-head">
-          <div className="tx-brand" style={{ padding: 0 }}>
+          <div className="tx-brand side-brand" style={{ padding: 0 }}>
+            <Logo size={24} />
             <b>TaaS</b>
             <span>· {state.name}</span>
           </div>

@@ -4,9 +4,16 @@ import type { Config, Incident, Perm, Priority, ResolutionCode, State, Status, U
 
 // onError: la pantalla muestra el error en su propio lugar (por ejemplo, junto al botón que lo provocó)
 // en vez del aviso general de arriba.
+// La marca: un talón de ticket troquelado con la T calada.
+export const Logo = ({ size = 24 }: { size?: number }) => (
+  <svg className="tx-logo" viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+    <path fillRule="evenodd" d="M4 4H20A2 2 0 0 1 22 6V9.5A2.5 2.5 0 0 0 22 14.5V18A2 2 0 0 1 20 20H4A2 2 0 0 1 2 18V14.5A2.5 2.5 0 0 0 2 9.5V6A2 2 0 0 1 4 4Z M7 8H17V10.2H13.1V16H10.9V10.2H7Z" />
+  </svg>
+)
+
 export type Run = (p: Promise<State>, opts?: { onError?: (message: string) => void }) => Promise<State | null>
 
-// Íconos del sistema (grilla 24, trazo 1.75), tal como vienen en los previews.
+// Íconos 24×24, trazo 1.75.
 const ICONS = {
   target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/>',
   alert: '<path d="M12 3.8 2.8 19.6h18.4z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
@@ -186,7 +193,7 @@ export const FieldError = ({ id, children }: { id: string; children: string }) =
 export const fields = (form: HTMLFormElement) => Object.fromEntries(new FormData(form)) as Record<string, string>
 
 const p2 = (n: number) => String(n).padStart(2, '0')
-// "04/10 18:03", como en el diseño.
+// "04/10 18:03"
 export function fmt(s: string) {
   const d = new Date(s)
   return `${p2(d.getDate())}/${p2(d.getMonth() + 1)} ${p2(d.getHours())}:${p2(d.getMinutes())}`
