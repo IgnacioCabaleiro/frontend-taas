@@ -39,6 +39,7 @@ const ICONS = {
   logout: '<path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/>',
   clip: '<path d="m20 11.5-8.2 8.2a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/>',
   download: '<path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/>',
+  inbox: '<path d="M4 13.5h4.5l1.5 2.5h4l1.5-2.5H20"/><path d="M6.5 5h11L20 13.5V19H4v-5.5z"/>',
 } as const
 
 export const Ic = ({ n, size = '' }: { n: keyof typeof ICONS; size?: '' | 'lg' | 'xl' }) => (
@@ -239,7 +240,17 @@ export const RESOLUTION: Record<ResolutionCode, string> = {
   duplicado: 'Duplicado',
   sin_reproducir: 'No se pudo reproducir',
   cancelado: 'Cancelado',
+  cumplida: 'Cumplida',
+  rechazada: 'Rechazada',
 }
+// Cada tipo de ticket se resuelve con sus códigos: una solicitud no se "soluciona", se cumple o se rechaza.
+export const resolutionCodes = (i: Incident): ResolutionCode[] =>
+  isRequest(i) ? ['cumplida', 'rechazada', 'duplicado', 'cancelado'] : ['solucionado', 'workaround', 'duplicado', 'sin_reproducir', 'cancelado']
+
+// Solicitud de servicio (un pedido del catálogo) o incidente (una falla): el mismo ticket, ver Incident.kind.
+export const isRequest = (i: Incident) => i.kind === 'solicitud'
+// Cómo se nombra el ticket en los textos: «el incidente» o «la solicitud».
+export const noun = (i: Incident) => (isRequest(i) ? { one: 'solicitud', the: 'la solicitud', a: 'una solicitud', o: 'a' } : { one: 'incidente', the: 'el incidente', a: 'un incidente', o: 'o' })
 // Con estos códigos resolver también cierra, en el mismo momento.
 export const CLOSING_CODES: ResolutionCode[] = ['duplicado', 'cancelado']
 // Los incidentes resueltos antes de que existieran los códigos tienen código vacío.
@@ -341,10 +352,10 @@ export const PauseBadge = () => (
   </span>
 )
 
-// Link al detalle de un incidente (sin acceso a la sección, el número queda como texto).
-export const IncidentId = ({ id, go }: { id: number; go?: (id: number) => void }) =>
+// Link al detalle de un incidente o una solicitud (sin acceso a la sección, el número queda como texto).
+export const IncidentId = ({ id, go, what = 'el incidente' }: { id: number; go?: (id: number) => void; what?: string }) =>
   go ? (
-    <A className="tx-id" aria-label={`Abrir el incidente ${id}`} onClick={() => go(id)}>
+    <A className="tx-id" aria-label={`Abrir ${what} ${id}`} onClick={() => go(id)}>
       #{id}
     </A>
   ) : (
