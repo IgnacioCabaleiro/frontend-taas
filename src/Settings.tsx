@@ -14,8 +14,9 @@ const PERMS: [Perm, string][] = [
 const clone = (c: Config): Config => JSON.parse(JSON.stringify(c))
 
 // Borrador de la configuración: los números guardan el texto del input, para mostrar exactamente lo que se escribe (también vacío).
-type NumKeys = 'slaHours' | 'responseHours' | 'recurrenceMin' | 'recurrenceDays' | 'autoCloseDays'
+type NumKeys = 'slaHours' | 'responseHours' | 'recurrenceMin' | 'recurrenceDays' | 'autoCloseDays' | 'requestTypes'
 type Draft = Omit<Config, NumKeys> & {
+  requestTypes: { name: string; hours: string }[]
   slaHours: Record<Priority, string>
   responseHours: Record<Priority, string>
   recurrenceMin: string
@@ -24,6 +25,7 @@ type Draft = Omit<Config, NumKeys> & {
 }
 // Lo que se envía (los ayudantes de números están en ui.tsx, compartidos con el onboarding). Un número vacío viaja como null: el backend lo rechaza con su mensaje (sin validación nueva en el front).
 type Sent = Omit<Config, NumKeys> & {
+  requestTypes: { name: string; hours: number | null }[]
   slaHours: Record<Priority, number | null>
   responseHours: Record<Priority, number | null>
   recurrenceMin: number | null
@@ -39,6 +41,7 @@ const toDraft = (c: Config): Draft => {
     recurrenceMin: String(d.recurrenceMin),
     recurrenceDays: String(d.recurrenceDays),
     autoCloseDays: String(d.autoCloseDays),
+    requestTypes: d.requestTypes.map((r) => ({ name: r.name, hours: String(r.hours) })),
   }
 }
 const toSent = (d: Draft): Sent => ({
@@ -48,6 +51,7 @@ const toSent = (d: Draft): Sent => ({
   recurrenceMin: num(d.recurrenceMin),
   recurrenceDays: num(d.recurrenceDays),
   autoCloseDays: num(d.autoCloseDays),
+  requestTypes: d.requestTypes.map((r) => ({ name: r.name, hours: num(r.hours) })),
 })
 // Opciones de un campo Lista: la coma y el salto de línea (Enter) las separan; se muestran unidas por ", ".
 // No quedan opciones vacías (por ejemplo, por un Enter junto a una coma), salvo la última, que es la nueva que se está
@@ -232,6 +236,63 @@ export function Settings({ state, run }: { state: State; run: Run }) {
           />
         </section>
       </div>
+
+      <section className="tx-panel tx-solid">
+        <div>
+          <h3 className="tx-h3">Catálogo de solicitudes</h3>
+          <p className="tx-caption">
+            Lo que se puede pedir (un alta, un acceso, un equipo) y en cuántas horas se cumple. Una solicitud no es una falla: no lleva prioridad ni se
+            vincula a problemas, y su plazo es el de esta lista{c.modules.sla ? '' : ' (se aplica si activás el SLA)'}.
+          </p>
+        </div>
+        {c.requestTypes.length === 0 && <div className="tx-inline-empty">Sin catálogo: la cuenta no recibe solicitudes, solo incidentes.</div>}
+        {c.requestTypes.map((r, i) => {
+          const name = r.name || `la solicitud ${i + 1}`
+          const setItem = (patch: Partial<Draft['requestTypes'][number]>) =>
+            set({ requestTypes: c.requestTypes.map((x, j) => (j === i ? { ...x, ...patch } : x)) })
+          return (
+            <div key={i} className="cfg-line" style={{ flexWrap: 'wrap' }}>
+              <span className="tx-count">{i + 1}</span>
+              <input
+                className="tx-input"
+                style={{ flex: '1 1 220px' }}
+                aria-label={`Solicitud ${i + 1}`}
+                placeholder="Qué se puede pedir"
+                value={r.name}
+                onChange={(e) => setItem({ name: e.target.value })}
+              />
+              <span className="cfg-hours">
+                <input
+                  className="tx-input cfg-num"
+                  type="number"
+                  min={1}
+                  aria-label={`Horas para cumplir ${name}`}
+                  value={r.hours}
+                  onChange={(e) => setItem({ hours: e.target.value })}
+                />
+                <span className="tx-muted">horas</span>
+              </span>
+              <button
+                type="button"
+                className="tx-btn ghost icon sm"
+                aria-label={`Quitar ${name}`}
+                onClick={() => set({ requestTypes: c.requestTypes.filter((_, j) => j !== i) })}
+              >
+                <Ic n="trash" />
+              </button>
+            </div>
+          )
+        })}
+        <button
+          type="button"
+          className="tx-btn ghost sm"
+          style={{ alignSelf: 'flex-start' }}
+          onClick={() => set({ requestTypes: [...c.requestTypes, { name: '', hours: '24' }] })}
+        >
+          <Ic n="plus" />
+          Agregar solicitud
+        </button>
+      </section>
 
       <section className="tx-panel tx-solid">
         <div>

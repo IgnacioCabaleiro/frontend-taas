@@ -2,7 +2,7 @@
 // El archivo se baja con el token y se entrega como blob: un <a href> directo no puede mandar el header.
 import { useState } from 'react'
 import { api, ATTACHMENT_EXTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, type Attachment, type Incident, type State } from './api'
-import { Ic, author, can, fmt, stage, type Run } from './ui'
+import { Ic, author, can, fmt, noun, stage, type Run } from './ui'
 
 export const fileSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
 
@@ -196,7 +196,7 @@ export function AttachmentsPanel({ i, state, run }: { i: Incident; state: State;
             }}
           />
           <span className="tx-help" id="att-help">
-            {canResolve ? 'Los ve también el solicitante: para algo interno usá una nota.' : 'Los ve el equipo que atiende tu incidente.'}
+            {canResolve ? 'Los ve también el solicitante: para algo interno usá una nota.' : `Los ve el equipo que atiende tu ${noun(i).one}.`}
           </span>
           {errors.length > 0 && (
             <ul className="att-errors" role="alert">

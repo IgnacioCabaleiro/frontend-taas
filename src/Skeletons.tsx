@@ -249,6 +249,7 @@ export const SKELETON = {
   sla: PanelSkeleton,
   problemas: BoardSkeleton,
   incidentes: IncidentsSkeleton,
+  solicitudes: IncidentsSkeleton,
   kedb: KnownErrorsSkeleton,
   config: SettingsSkeleton,
 }

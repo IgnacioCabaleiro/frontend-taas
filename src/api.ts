@@ -33,13 +33,22 @@ export type Config = {
   fields: Field[]
   recurrenceMin: number
   recurrenceDays: number
+  // Catálogo de solicitudes de servicio: qué se puede pedir y en cuántas horas se cumple. Vacío = sin solicitudes.
+  requestTypes: RequestType[]
 }
+
+export type RequestType = { name: string; hours: number }
 
 export type Role = { id: number; name: string; perms: Perm[]; locked: boolean }
 export type User = { id: number; name: string; email: string; roleId: number }
 
+// Un ticket: un incidente (algo dejó de funcionar) o una solicitud de servicio (un pedido estándar del catálogo).
+// Las solicitudes vienen aparte, en State.requests: no tienen servicio, prioridad, impacto, urgencia ni problema
+// (llegan vacíos) y su SLA es el del ítem del catálogo, sin vencimiento de primera respuesta.
 export type Incident = {
   id: number
+  kind: 'incidente' | 'solicitud'
+  requestType: string // el ítem del catálogo de una solicitud; '' en un incidente
   title: string
   description: string
   service: string
@@ -74,7 +83,7 @@ export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 export const MAX_ATTACHMENTS = 10
 export const ATTACHMENT_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf', '.txt', '.log', '.csv', '.zip']
 
-export type ResolutionCode = 'solucionado' | 'workaround' | 'duplicado' | 'sin_reproducir' | 'cancelado'
+export type ResolutionCode = 'solucionado' | 'workaround' | 'duplicado' | 'sin_reproducir' | 'cancelado' | 'cumplida' | 'rechazada'
 // Historial del incidente (userId 0 = Sistema). Quien solo reporta no recibe las notas.
 export type IncidentEvent = {
   at: string
@@ -84,9 +93,12 @@ export type IncidentEvent = {
 }
 export type IncidentPatch = { status?: string; assigneeId?: number; problemId?: number; resolutionCode?: ResolutionCode; resolutionNote?: string }
 export type NewIncident = {
+  // Sin kind es un incidente. Una solicitud pide requestType (un ítem del catálogo); el título es opcional.
+  kind?: 'incidente' | 'solicitud'
+  requestType?: string
   title: string
   description?: string
-  service: string
+  service?: string
   // El backend calcula la prioridad con la matriz; priority solo se usa si no vienen impacto ni urgencia.
   impact?: Priority
   urgency?: Priority
@@ -123,7 +135,8 @@ export type State = {
   config: Config
   roles: Role[]
   users: User[]
-  incidents: Incident[]
+  incidents: Incident[] // solo incidentes
+  requests: Incident[] // las solicitudes de servicio, aparte
   problems: Problem[]
   suggestions: { service: string; incidentIds: number[] }[]
 }

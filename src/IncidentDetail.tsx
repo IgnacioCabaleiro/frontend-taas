@@ -1,5 +1,7 @@
-// Detalle de un incidente: su ciclo de vida ITIL (registro, diagnóstico, resolución, cierre), la actividad
-// con el solicitante y las notas de trabajo, y los dos SLA.
+// Detalle de un ticket: su ciclo de vida ITIL (registro, diagnóstico, resolución, cierre), la actividad
+// con el solicitante y las notas de trabajo, y los SLA. Sirve para los incidentes y para las solicitudes de servicio:
+// una solicitud muestra su ítem del catálogo en lugar del servicio y la prioridad, no se vincula a problemas, tiene
+// un solo plazo (el del catálogo) y se resuelve con sus propios códigos.
 import { useState } from 'react'
 import { api, type Incident, type ResolutionCode, type State } from './api'
 import { AttachmentsPanel } from './Attachments'
@@ -28,6 +30,9 @@ import {
   fields,
   fmt,
   isPaused,
+  isRequest,
+  noun,
+  resolutionCodes,
   resolutionLabel,
   stage,
   userName,
@@ -75,6 +80,8 @@ export function IncidentDetail(props: {
 }) {
   const { i, state, run } = props
   const { config, users, problems } = state
+  const req = isRequest(i)
+  const n = noun(i)
   const canResolve = can(state, 'resolver')
   const st = stage(i)
   const initial = config.states[0]
@@ -90,9 +97,10 @@ export function IncidentDetail(props: {
   const patch = (b: Parameters<typeof api.updateIncident>[1]) => run(api.updateIncident(i.id, b))
   // Registrar uno relacionado: quien resuelve, o el solicitante con uno suyo; siempre que su rol pueda registrar.
   const canRelate = st === 'cerrado' && can(state, 'crear') && (canResolve || mine)
-  const showProblem = config.modules.problems && (canResolve || can(state, 'problemas'))
+  const showProblem = !req && config.modules.problems && (canResolve || can(state, 'problemas'))
   const editable = canResolve && st !== 'cerrado'
-  const related = state.incidents.some((x) => x.id === i.relatedIncidentId) ? props.goIncident : undefined
+  // Un ticket solo se relaciona con uno de su mismo tipo.
+  const related = (req ? state.requests : state.incidents).some((x) => x.id === i.relatedIncidentId) ? props.goIncident : undefined
 
   const head = (
     <div className="tx-panel-head">
@@ -127,7 +135,7 @@ export function IncidentDetail(props: {
     <>
       <A className="tx-back" style={{ alignSelf: 'flex-start' }} onClick={props.back}>
         <Ic n="back" />
-        Volver a incidentes
+        Volver a {req ? 'solicitudes' : 'incidentes'}
       </A>
       <header className="tx-detail-head tx-glass" style={{ marginTop: -12 }}>
         <div className="meta">
@@ -135,11 +143,22 @@ export function IncidentDetail(props: {
             #{i.id}
           </span>
           <span className="tx-subtle">·</span>
-          <span className="tx-muted" style={{ fontSize: 13, fontWeight: 550 }}>
-            {i.service}
-          </span>
-          <Prio p={i.priority} />
-          <MatrixCaption i={i} />
+          {req ? (
+            <>
+              <span className="tx-badge">Solicitud</span>
+              <span className="tx-muted" style={{ fontSize: 13, fontWeight: 550 }}>
+                {i.requestType}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="tx-muted" style={{ fontSize: 13, fontWeight: 550 }}>
+                {i.service}
+              </span>
+              <Prio p={i.priority} />
+              <MatrixCaption i={i} />
+            </>
+          )}
           <StageBadge i={i} />
           {!i.resolvedAt && <IncBadge i={i} />}
           {paused && <PauseBadge />}
@@ -147,7 +166,7 @@ export function IncidentDetail(props: {
         <h1 className="tx-h1">{i.title}</h1>
       </header>
 
-      <ol className="tx-stepper tx-glass" aria-label="Etapas del incidente">
+      <ol className="tx-stepper tx-glass" aria-label={`Etapas de ${n.the}`}>
         {STEP_NAME.map((nm, k) => {
           const done = k < step
           return (
@@ -188,7 +207,7 @@ export function IncidentDetail(props: {
                     <div className="tx-row" style={{ gap: 10 }}>
                       <Ic n="pause" />
                       <span style={{ fontSize: 13 }}>
-                        El reloj del SLA de resolución está detenido desde el {fmt(i.pausedAt!)}, mientras el incidente siga en «{i.status}».
+                        El reloj del SLA de resolución está detenido desde el {fmt(i.pausedAt!)}, mientras {n.the} siga en «{i.status}».
                       </span>
                     </div>
                   </div>
@@ -216,7 +235,7 @@ export function IncidentDetail(props: {
                         ? canResolve
                           ? `Se cierra automáticamente el ${fmt(closesAt.toISOString())} si no hay actividad.`
                           : 'Se cierra automáticamente si no hay actividad.'
-                        : 'El cierre automático está frenado: el solicitante respondió después de la resolución. Quien gestiona el incidente decide si lo cierra o lo reabre.'}
+                        : `El cierre automático está frenado: el solicitante respondió después de la resolución. Quien gestiona ${n.the} decide si l${n.o} cierra o l${n.o} reabre.`}
                     </span>
                   </div>
                 </div>
@@ -254,7 +273,9 @@ export function IncidentDetail(props: {
                       {auto
                         ? `Cerrado automáticamente el ${fmt(i.closedAt!)}.`
                         : `Cerrado el ${fmt(i.closedAt!)}${closing ? ` por ${author(users, closing.userId)}` : ''}.`}{' '}
-                      Un incidente cerrado es de solo lectura: si vuelve a pasar, se registra un incidente relacionado.
+                      {req
+                        ? 'Una solicitud cerrada es de solo lectura: si hace falta otra vez, se registra una solicitud relacionada.'
+                        : 'Un incidente cerrado es de solo lectura: si vuelve a pasar, se registra un incidente relacionado.'}
                     </span>
                   </div>
                 </div>
@@ -262,7 +283,7 @@ export function IncidentDetail(props: {
                   <div className="tx-actions">
                     <button type="button" className="tx-btn primary lg" onClick={() => props.onRelated(i.id)}>
                       <Ic n="plus" />
-                      Registrar incidente relacionado
+                      Registrar {req ? 'solicitud relacionada' : 'incidente relacionado'}
                     </button>
                   </div>
                 )}
@@ -278,7 +299,7 @@ export function IncidentDetail(props: {
             </h2>
             <Composer i={i} state={state} run={run} />
             {i.history.length === 0 ? (
-              <div className="tx-inline-empty">Este incidente no tiene actividad registrada.</div>
+              <div className="tx-inline-empty">{req ? 'Esta solicitud' : 'Este incidente'} no tiene actividad registrada.</div>
             ) : (
               <ol className="tx-timeline">
                 {[...i.history].reverse().map((h, k) => (
@@ -390,11 +411,16 @@ export function IncidentDetail(props: {
             <section className="tx-side-card tx-glass">
               <h3 className="tx-h3">SLA</h3>
               <dl className="inc-facts">
-                <dt>Primera respuesta</dt>
-                <dd>
-                  <FirstResponse i={i} />
-                </dd>
-                <dt>Resolución</dt>
+                {/* Una solicitud tiene un solo plazo, el de su ítem del catálogo: no mide la primera respuesta. */}
+                {!req && (
+                  <>
+                    <dt>Primera respuesta</dt>
+                    <dd>
+                      <FirstResponse i={i} />
+                    </dd>
+                  </>
+                )}
+                <dt>{req ? 'Plazo del catálogo' : 'Resolución'}</dt>
                 <dd>
                   <Sla i={i} />
                   {paused && <PauseBadge />}
@@ -447,6 +473,7 @@ function Composer({ i, state, run }: { i: Incident; state: State; run: Run }) {
   const note = canResolve && !isPublic
   const label = !canResolve ? 'Responder' : note ? 'Nota de trabajo interna' : 'Respuesta al solicitante'
   const mode = note ? 'note' : 'reply'
+  const n = noun(i)
 
   return (
     <form
@@ -515,7 +542,11 @@ function Composer({ i, state, run }: { i: Incident; state: State; run: Run }) {
           <FieldError id="inc-msg-e">Escribí el mensaje antes de enviarlo.</FieldError>
         ) : (
           <span className="tx-help" id="inc-msg-h">
-            {note ? 'Solo la ve el equipo que atiende el incidente: el solicitante nunca la ve.' : canResolve ? 'La ve el solicitante.' : 'La ve el equipo que atiende tu incidente.'}
+            {note
+              ? `Solo la ve el equipo que atiende ${n.the}: el solicitante nunca la ve.`
+              : canResolve
+                ? 'La ve el solicitante.'
+                : `La ve el equipo que atiende tu ${n.one}.`}
           </span>
         )}
       </div>
@@ -524,7 +555,9 @@ function Composer({ i, state, run }: { i: Incident; state: State; run: Run }) {
           <div className="tx-row" style={{ gap: 10, flexWrap: 'nowrap' }}>
             <Ic n="warn" />
             <span style={{ fontSize: 13 }}>
-              Este incidente ya está resuelto. Si respondés, ya no se va a cerrar solo: quien lo gestiona lee tu respuesta y decide si lo reabre.
+              {isRequest(i)
+                ? 'Esta solicitud ya está resuelta. Si respondés, ya no se va a cerrar sola: quien la gestiona lee tu respuesta y decide si la reabre.'
+                : 'Este incidente ya está resuelto. Si respondés, ya no se va a cerrar solo: quien lo gestiona lee tu respuesta y decide si lo reabre.'}
             </span>
           </div>
         </div>
@@ -558,6 +591,8 @@ function ResolveDialog({ i, state, run, error, onClose }: { i: Incident; state: 
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const closes = code !== '' && CLOSING_CODES.includes(code)
+  const req = isRequest(i)
+  const n = noun(i)
 
   return (
     <Dialog
@@ -600,7 +635,7 @@ function ResolveDialog({ i, state, run, error, onClose }: { i: Incident; state: 
           aria-describedby={errs.code ? 'rs-c-e' : undefined}
         >
           <option value="">Elegí cómo terminó</option>
-          {(Object.keys(RESOLUTION) as ResolutionCode[]).map((c) => (
+          {resolutionCodes(i).map((c) => (
             <option key={c} value={c}>
               {RESOLUTION[c]}
             </option>
@@ -613,7 +648,7 @@ function ResolveDialog({ i, state, run, error, onClose }: { i: Incident; state: 
           <div className="tx-row" style={{ gap: 10, flexWrap: 'nowrap' }}>
             <Ic n="warn" />
             <span style={{ fontSize: 13 }}>
-              Con «{RESOLUTION[code as ResolutionCode]}» el incidente se resuelve y se cierra en el mismo momento: queda de solo lectura y ya no se puede reabrir.
+              Con «{RESOLUTION[code as ResolutionCode]}» {n.the} se resuelve y se cierra en el mismo momento: queda de solo lectura y ya no se puede reabrir.
             </span>
           </div>
         </div>
@@ -629,13 +664,17 @@ function ResolveDialog({ i, state, run, error, onClose }: { i: Incident; state: 
           defaultValue={wa}
           aria-invalid={errs.note || undefined}
           aria-describedby={errs.note ? 'rs-n-e' : 'rs-n-h'}
-          placeholder="Qué se hizo para restablecer el servicio."
+          placeholder={req ? 'Qué se entregó o habilitó, o por qué no se pudo.' : 'Qué se hizo para restablecer el servicio.'}
         />
         {errs.note ? (
-          <FieldError id="rs-n-e">Contá cómo se resolvió el incidente.</FieldError>
+          <FieldError id="rs-n-e">{`Contá cómo se resolvió ${n.the}.`}</FieldError>
         ) : (
           <span className="tx-help" id="rs-n-h">
-            {wa ? 'Precargamos el workaround del problema vinculado: ajustalo si hiciste algo distinto.' : 'Describí la resolución, no el síntoma.'}
+            {wa
+              ? 'Precargamos el workaround del problema vinculado: ajustalo si hiciste algo distinto.'
+              : req
+                ? 'Si la rechazás, explicá el motivo: el solicitante lo lee.'
+                : 'Describí la resolución, no el síntoma.'}
           </span>
         )}
       </div>
@@ -689,7 +728,7 @@ function ReopenDialog({ i, state, run, error, onClose }: { i: Incident; state: S
           aria-describedby={invalid ? 'ro-r-e' : undefined}
           placeholder="Por qué el servicio no quedó restablecido. Ej.: el solicitante avisó que vuelve a pasar."
         />
-        {invalid && <FieldError id="ro-r-e">Contá por qué se reabre el incidente.</FieldError>}
+        {invalid && <FieldError id="ro-r-e">{`Contá por qué se reabre ${noun(i).the}.`}</FieldError>}
       </div>
       <DialogError show={failed} error={error} />
     </Dialog>

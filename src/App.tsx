@@ -8,6 +8,7 @@ import { SlaMetrics } from './SlaMetrics'
 import { Board, NewProblemModal, ProblemDetail } from './Problems'
 import { Incidents } from './Incidents'
 import { IncidentDetail } from './IncidentDetail'
+import { Requests } from './Requests'
 import { KnownErrors } from './KnownErrors'
 import { Settings } from './Settings'
 import { SKELETON } from './Skeletons'
@@ -17,6 +18,7 @@ const TABS = {
   sla: { nav: 'SLA', icon: 'clock', title: 'Métricas de SLA', sub: 'Cuánto se cumplen los plazos de respuesta y resolución, dónde fallan y qué está por vencer.' },
   problemas: { nav: 'Problemas', icon: 'target', title: 'Problemas', sub: 'Detectá incidentes recurrentes, investigá la causa y cerrá todo junto.' },
   incidentes: { nav: 'Incidentes', icon: 'alert', title: 'Incidentes', sub: 'Registrá lo que está pasando y seguí cada ticket hasta que se resuelve.' },
+  solicitudes: { nav: 'Solicitudes', icon: 'inbox', title: 'Solicitudes', sub: 'Pedí lo que necesitás del catálogo (un alta, un acceso, un equipo) y seguí cada pedido hasta que se cumple.' },
   kedb: { nav: 'Errores conocidos', icon: 'book', title: 'Errores conocidos', sub: 'La base de conocimiento del equipo: causas raíz, workarounds y soluciones.' },
   config: { nav: 'Configuración', icon: 'gear', title: 'Configuración', sub: 'Adaptá la ticketera a tu empresa y decidí qué puede hacer cada persona.' },
 } as const
@@ -31,6 +33,8 @@ function allowedTabs(s: State): Tab[] {
     ['sla', s.config.modules.sla && p('panel')],
     ['problemas', problems && p('problemas')],
     ['incidentes', p('crear') || p('resolver')],
+    // Solicitudes: con catálogo, o si ya hay alguna para seguir (el catálogo pudo quedar vacío después).
+    ['solicitudes', (p('crear') || p('resolver')) && (s.config.requestTypes.length > 0 || s.requests.length > 0 || p('config'))],
     ['kedb', problems && (p('resolver') || p('problemas'))],
     ['config', p('config')],
   ]
@@ -118,13 +122,22 @@ export default function App() {
   }
   const goProblem = tabs.includes('problemas') ? (id: number) => go('problemas', id) : undefined
   const goIncident = tabs.includes('incidentes') ? (id: number) => go('incidentes', id) : undefined
+  const goConfig = tabs.includes('config') ? () => go('config') : undefined
   const me = state?.users.find((u) => u.id === state.me)
   const open = current === 'problemas' ? state?.problems.find((p) => p.id === openId) : undefined
-  const openInc = current === 'incidentes' ? state?.incidents.find((i) => i.id === openId) : undefined
+  const openInc =
+    current === 'incidentes'
+      ? state?.incidents.find((i) => i.id === openId)
+      : current === 'solicitudes'
+        ? state?.requests.find((i) => i.id === openId)
+        : undefined
+  // El detalle es el mismo para los dos tipos: vuelve, abre y relaciona dentro de su propia sección.
+  const ticketTab: Tab = current === 'solicitudes' ? 'solicitudes' : 'incidentes'
   const counts: Partial<Record<Tab, number>> = state
     ? {
         problemas: state.problems.filter((p) => p.status !== 'resuelto').length,
         incidentes: state.incidents.filter((i) => !i.resolvedAt).length,
+        solicitudes: state.requests.filter((i) => !i.resolvedAt).length,
         kedb: state.problems.length,
       }
     : {}
@@ -248,24 +261,27 @@ export default function App() {
               {current === 'sla' && <SlaMetrics state={state} run={run} goIncident={goIncident} />}
               {current === 'problemas' && open && <ProblemDetail p={open} state={state} run={run} back={() => setOpenId(0)} goIncident={goIncident} />}
               {current === 'problemas' && !open && <Board state={state} run={run} open={setOpenId} />}
-              {current === 'incidentes' && openInc && (
+              {openInc && (
                 <IncidentDetail
                   key={openInc.id}
                   i={openInc}
                   state={state}
                   run={run}
                   error={error?.message}
-                  back={() => go('incidentes')}
+                  back={() => go(ticketTab)}
                   goProblem={goProblem}
-                  goIncident={(id) => go('incidentes', id)}
+                  goIncident={(id) => go(ticketTab, id)}
                   onRelated={(id) => {
-                    go('incidentes')
+                    go(ticketTab)
                     setRelated(id)
                   }}
                 />
               )}
               {current === 'incidentes' && !openInc && (
                 <Incidents state={state} run={run} goProblem={goProblem} open={(id) => go('incidentes', id)} related={related} setRelated={setRelated} />
+              )}
+              {current === 'solicitudes' && !openInc && (
+                <Requests state={state} run={run} open={(id) => go('solicitudes', id)} related={related} setRelated={setRelated} goConfig={goConfig} />
               )}
               {current === 'kedb' && <KnownErrors state={state} goProblem={goProblem} goIncidents={() => go('incidentes')} />}
               {current === 'config' && <Settings key={state.id} state={state} run={run} />}
