@@ -31,6 +31,9 @@ docker run -p 5173:80 taas-frontend
 | `Incidents.tsx` | alta y lista de incidentes, con filtros por etapa |
 | `IncidentDetail.tsx` | detalle de un incidente: ciclo de vida ITIL, actividad, SLA, resolución, reapertura y cierre |
 | `Problems.tsx` | tablero y detalle de problemas |
-| `KnownErrors.tsx` | base de errores conocidos |
+| `KnownErrors.tsx` | base de errores conocidos, con su rendimiento |
+| `Knowledge.tsx` | sugerencias de errores conocidos al escribir, incidentes parecidos y panel del workaround |
+| `Review.tsx` | impacto acumulado de un problema y su revisión post-problema |
+| `Rating.tsx` | valoración de la atención por quien reportó |
 | `Settings.tsx` | usuarios, roles y configuración de la ticketera |
 | `App.tsx` · `api.ts` · `ui.tsx` | shell y navegación · cliente de la API · piezas compartidas |

@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Problem, type State } from './api'
+import { WorkaroundPanel } from './Knowledge'
+import { ImpactStrip, ReviewPanel, impact } from './Review'
 import { A, Dialog, FieldError, Filters, Ic, IncStage, IncidentId, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, can, count, fields, fmt, userName, usersWith, type Run } from './ui'
 
 export function Board({ state, run, open }: { state: State; run: Run; open: (id: number) => void }) {
@@ -118,6 +120,7 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
                   <th>Estado</th>
                   <th>Responsable</th>
                   <th className="num">Incidentes vinculados</th>
+                  <th className="num" title="Horas de servicio afectado sumando todos sus incidentes">Impacto</th>
                 </tr>
               </thead>
               <tbody>
@@ -149,6 +152,12 @@ export function Board({ state, run, open }: { state: State; run: Run; open: (id:
                         <span className="tx-linked">
                           <b>{inc.length}</b>
                           <span>{!inc.length ? 'sin incidentes' : abiertos ? count(abiertos, 'abierto') : 'todos resueltos'}</span>
+                        </span>
+                      </td>
+                      <td className="num" data-label="Impacto">
+                        <span className="tx-linked">
+                          <b>{impact(p, state.incidents).hours} h</b>
+                          <span>{count(impact(p, state.incidents).people, 'persona', 'personas')}</span>
                         </span>
                       </td>
                     </tr>
@@ -235,6 +244,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
         </div>
         <h1 className="tx-h1">{p.title}</h1>
         {p.description && <p className="desc">{p.description}</p>}
+        <ImpactStrip p={p} state={state} />
       </header>
 
       <ol className="tx-stepper tx-glass" aria-label="Etapas del problema">
@@ -328,7 +338,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
           <form className="tx-panel tx-solid" noValidate onSubmit={advance('solution')}>
             {head}
             <RootCause text={p.rootCause} />
-            {p.workaround && <Workaround text={p.workaround} />}
+            <WorkaroundPanel key={p.id} p={p} state={state} run={run} openIds={incidents.filter((i) => !i.resolvedAt).map((i) => i.id)} />
             <div className="tx-field">
               <label className="tx-label" htmlFor="sol">
                 Solución definitiva <span className="req">*</span>
@@ -361,6 +371,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
         )}
 
         {p.status === 'resuelto' && (
+          <div className="tx-stack" style={{ gap: 20, minWidth: 0 }}>
           <section className="tx-panel tx-solid">
             {head}
             <RootCause text={p.rootCause} />
@@ -370,6 +381,8 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
               Resuelto el {when(3)} · {count(incidents.length, 'incidente')} {incidents.length === 1 ? 'vinculado' : 'vinculados'}
             </div>
           </section>
+          <ReviewPanel key={p.id} p={p} state={state} run={run} />
+          </div>
         )}
 
         <div className="tx-side-panel">
@@ -396,7 +409,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
                       ) : p.workaround && canResolve ? (
                         <button
                           className="tx-btn secondary sm"
-                          onClick={() => run(api.updateIncident(i.id, { status: resolvedState, resolutionCode: 'workaround', resolutionNote: p.workaround }))}
+                          onClick={() => run(api.applyWorkaround(i.id, p.id))}
                         >
                           <Ic n="bulb" />
                           Resolver con workaround

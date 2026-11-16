@@ -19,7 +19,7 @@ select.tx-input { cursor: pointer; }
 .tx-clickable { cursor: pointer; }
 
 /* ---------- Panel: gráficos ----------
-   Serie 1 y 2 de la paleta categórica validada (skill dataviz), con su paso propio para tema oscuro.
+   Paleta de gráficos: dos series, con variante para el tema oscuro.
    Los colores de estado del sistema quedan reservados para estados. */
 :root { --viz-1: #2a78d6; --viz-2: #eb6834; }
 [data-theme="dark"] { --viz-1: #3987e5; --viz-2: #d95926; }
@@ -270,3 +270,63 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
   .onb-picks, .onb-picks.two { grid-template-columns: 1fr; }
   .onb-step { padding: 20px; }
 }
+
+/* ---------- Errores conocidos y workarounds ---------- */
+.kn-hits .tx-workaround, .kn-hit .tx-callout { margin: 0; }
+.kn-hit { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+.kn-hit:first-of-type { border-top: 0; padding-top: 0; }
+.kn-match { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-subtle); font-weight: 500; white-space: nowrap; }
+.kn-bar { width: 44px; height: 4px; border-radius: 4px; background: var(--hairline-strong); overflow: hidden; }
+.kn-bar i { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
+.kn-inc { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.kn-inc .t { flex: 1; min-width: 120px; }
+.kn-stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; font-size: 13px; color: var(--ink-muted); }
+.kn-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.kn-stats .kn-low b { color: var(--danger-fg); }
+
+/* ---------- Marca ---------- */
+.tx-logo { flex: none; color: var(--brand); }
+.side-brand { align-items: center; gap: 8px; padding: 2px 10px 14px; }
+.side-brand b { font-size: 20px; }
+.auth-brand { align-items: center; gap: 8px; padding: 0; }
+.auth-brand b { font-size: 22px; }
+.auth-brand span { margin-left: 6px; color: var(--ink-muted); font-size: 13px; }
+
+/* ---------- Lista de incidentes ---------- */
+.inc-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.inc-search { flex: 1; min-width: 220px; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: var(--radius-md); background: var(--surface-solid); border: 1px solid var(--control-border); color: var(--ink-subtle); }
+.inc-search:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px var(--brand-tint); }
+.inc-search input { flex: 1; border: 0; background: none; outline: none; height: 100%; color: var(--ink); font-size: 14px; }
+.inc-sort { display: flex; align-items: center; gap: 8px; }
+.inc-sort .tx-input { width: auto; }
+
+/* ---------- Valoración ---------- */
+.rt-ask, .rt-done { display: flex; flex-direction: column; gap: 10px; }
+.rt-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.rt-opt { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: var(--radius-md); border: 1px solid var(--control-border); background: var(--surface-solid); color: var(--ink-muted); font-size: 12px; cursor: pointer; }
+.rt-opt b { font-size: 16px; color: var(--ink); }
+.rt-opt:hover { border-color: var(--brand); }
+.rt-opt.on { border-color: var(--brand); background: var(--brand-tint); color: var(--ink); }
+.rt-stars { display: inline-flex; gap: 3px; }
+.rt-stars i { width: 10px; height: 10px; border-radius: 50%; background: var(--hairline-strong); }
+.rt-stars i.on { background: var(--status-conocido-dot); }
+
+/* ---------- Impacto y revisión post-problema ---------- */
+.pb-impact { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--ink-muted); }
+.pb-impact b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.pb-impact em { font-style: normal; color: var(--prio-alta-fg); }
+.pir-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.pir-facts > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-sunken); border: 1px solid var(--hairline); }
+.pir-facts b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.pir-actions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pir-actions li { display: flex; flex-direction: column; gap: 2px; }
+.pir-actions li.done .pir-text { text-decoration: line-through; color: var(--ink-subtle); }
+.pir-actions .tx-caption { margin-left: 28px; }
+.pir-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 150px; gap: 8px; margin-bottom: 8px; }
+@media (max-width: 640px) { .pir-row { grid-template-columns: 1fr; } }
+
+/* ---------- Mapa de calor ---------- */
+.heat { display: grid; gap: 3px; align-items: center; font-size: 12px; }
+.heat-day { text-align: center; color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+.heat-svc { color: var(--ink-muted); font-weight: 500; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.heat-cell { height: 26px; border-radius: 5px; display: grid; place-items: center; color: var(--on-brand); font-weight: 600; font-variant-numeric: tabular-nums; }

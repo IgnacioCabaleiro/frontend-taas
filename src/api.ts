@@ -75,6 +75,9 @@ export type Incident = {
   autoCloseHold: boolean // el solicitante respondió estando resuelto: ya no se cierra solo
   relatedIncidentId: number // 0 = ninguno; si no, el incidente cerrado que este continúa
   attachments: Attachment[]
+  rating: number // 1 a 5; 0 = sin valorar
+  ratingComment: string
+  ratedAt?: string
 }
 
 // Archivo adjunto de un incidente. Lo ve cualquiera que vea el incidente, también quien lo reportó.
@@ -121,7 +124,23 @@ export type Problem = {
   solution: string
   createdAt: string
   history: { at: string; kind: '' | 'analisis' | 'conocido' | 'resuelto' | 'comentario'; text: string; userId: number }[]
+  workaroundShared: boolean // quienes reportan lo ven al escribir un incidente parecido
+  workaroundUses: { incidentId: number; at: string; userId: number; failed: boolean }[]
+  deflections: number // tickets que no se abrieron porque alcanzó el workaround
+  review?: ProblemReview // revisión post-problema, una vez resuelto
 }
+
+export type ProblemReview = {
+  whatHappened: string
+  learned: string
+  actions: { text: string; ownerId: number; due: string; done: boolean }[]
+  at: string
+  userId: number
+}
+
+// Sugerencias por similitud de texto (ver Knowledge en el backend).
+export type ProblemHit = { problemId: number; title: string; service: string; status: Status; workaround: string; score: number; shared: string[] }
+export type IncidentHit = { incidentId: number; title: string; status: string; resolved: boolean; problemId: number; score: number; shared: string[] }
 
 // La cuenta del cliente, tal como la ve el usuario logueado (el backend ya recorta según sus permisos).
 // Una foto de la configuración. Volver a una versión crea otra nueva: el historial solo crece.
@@ -254,6 +273,7 @@ export const api = {
   createIncident: (i: NewIncident) => t('/incidents', i),
   updateIncident: (id: number, patch: IncidentPatch) => t(`/incidents/${id}`, patch),
   comment: (id: number, text: string, isPublic: boolean) => t(`/incidents/${id}/comments`, { text, public: isPublic }),
+  rate: (id: number, rating: number, comment: string) => t(`/incidents/${id}/rating`, { rating, comment }),
   reopen: (id: number, reason: string) => t(`/incidents/${id}/reopen`, { reason }),
   close: (id: number) => t(`/incidents/${id}/close`, {}),
   addAttachment: (id: number, file: File) => {
@@ -277,4 +297,13 @@ export const api = {
   advance: (id: number, data: Record<string, string>) => t(`/problems/${id}/advance`, data),
   setOwner: (id: number, ownerId: number) => t(`/problems/${id}/owner`, { ownerId }),
   commentProblem: (id: number, text: string) => t(`/problems/${id}/comments`, { text }),
+
+  matchKnowledge: (text: string, service: string) =>
+    request<ProblemHit[]>(`/knowledge/match?${new URLSearchParams({ text, service })}`),
+  related: (id: number) => request<{ problems: ProblemHit[]; incidents: IncidentHit[] }>(`/incidents/${id}/related`),
+  applyWorkaround: (id: number, problemId: number) => t(`/incidents/${id}/workaround`, { problemId }),
+  updateWorkaround: (id: number, text: string, shared: boolean) => t(`/problems/${id}/workaround`, { text, shared }, 'PUT'),
+  deflect: (id: number) => t(`/problems/${id}/deflect`, {}),
+  saveReview: (id: number, r: Pick<ProblemReview, 'whatHappened' | 'learned' | 'actions'>) => t(`/problems/${id}/review`, r, 'PUT'),
+  setActionDone: (id: number, n: number, done: boolean) => t(`/problems/${id}/review/actions/${n}`, { done }, 'PUT'),
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api, type Priority, type State } from './api'
 import { Dropzone, FileChip, fileProblem } from './Attachments'
+import { KnownErrorHints, useMatches } from './Knowledge'
 import { A, FieldError, Filters, Ic, IncStage, IncidentId, LevelPicker, Prio, ProblemId, priorityFor, Sla, StatusBadge, can, count, fields, isLate, userName, usersWith, type Run } from './ui'
 
 export function Incidents(props: {
@@ -35,11 +36,23 @@ export function Incidents(props: {
   type Filter = 'abiertos' | 'mios' | 'vencidos' | 'pausa' | 'sin' | 'resueltos' | 'cerrados' | 'todos'
   const [filter, setFilter] = useState<Filter>('abiertos')
   const [busy, setBusy] = useState(false)
+  const [q, setQ] = useState('')
+  type Sort = 'urgentes' | 'recientes' | 'antiguos'
+  const [sort, setSort] = useState<Sort>('urgentes')
+  // Quien atiende vive en la lista: el alta se abre con un botón. Quien solo reporta entra a cargar.
+  const [composing, setComposing] = useState(!canResolve || related > 0)
 
   const active = problems.filter((p) => p.status !== 'resuelto')
   // Si el servicio ya tiene un problema activo, se ofrece su workaround al cargar el incidente.
   const match = active.find((p) => p.service === service)
-  const notice = canResolve && match && dismissed !== service
+  // Lo que se va escribiendo (título y detalle) se compara con los errores conocidos: el más parecido gana
+  // al aviso por servicio.
+  const [draft, setDraft] = useState('')
+  const hits = useMatches(draft, service, withProblems && canCreate)
+  const [linkTo, setLinkTo] = useState(0)
+  const [applyNow, setApplyNow] = useState(false)
+  const [deflected, setDeflected] = useState('')
+  const notice = canResolve && match && dismissed !== service && hits.length === 0
 
   // Filtros por etapa ITIL: abierto (sin resolvedAt), resuelto sin cerrar y cerrado.
   const openOnes = incidents.filter((i) => !i.resolvedAt)
@@ -53,6 +66,20 @@ export function Incidents(props: {
     cerrados: incidents.filter((i) => i.closedAt),
     todos: incidents,
   }
+
+  const PRIO_RANK = { alta: 0, media: 1, baja: 2 }
+  const due = (i: (typeof incidents)[number]) => (i.dueAt ? +new Date(i.dueAt) : Infinity)
+  const needle = q.trim().toLowerCase().replace(/^#/, '')
+  const rows = lists[filter]
+    .filter((i) =>
+      !needle ? true : [String(i.id), i.title, i.service, i.status, userName(users, i.assigneeId, '')].join(' ').toLowerCase().includes(needle),
+    )
+    .sort((a, b) => {
+      if (sort === 'recientes') return b.id - a.id
+      if (sort === 'antiguos') return a.id - b.id
+      // Urgentes: vencidos primero, después lo que vence antes y, a igual vencimiento, la mayor prioridad.
+      return Number(isLate(b)) - Number(isLate(a)) || due(a) - due(b) || PRIO_RANK[a.priority] - PRIO_RANK[b.priority] || b.id - a.id
+    })
 
   // Los filtros dependen de lo que el usuario puede hacer y de cómo trabaja la cuenta.
   const options = (
@@ -72,8 +99,25 @@ export function Incidents(props: {
 
   return (
     <>
-      {canCreate && (
+      {canCreate && !composing && (
+        <div className="tx-row">
+          <button type="button" className="tx-btn primary" onClick={() => setComposing(true)}>
+            <Ic n="plus" />
+            Nuevo incidente
+          </button>
+          {deflected && <span className="tx-caption">A quien reportó le alcanzó el workaround de «{deflected}».</span>}
+        </div>
+      )}
+      {canCreate && composing && (
       <section className="tx-stack" style={{ gap: 12 }}>
+        {canResolve && (
+          <div className="tx-row" style={{ justifyContent: 'space-between' }}>
+            <h2 className="tx-h3">Nuevo incidente</h2>
+            <button type="button" className="tx-btn ghost sm" onClick={() => setComposing(false)}>
+              Cancelar
+            </button>
+          </div>
+        )}
         {related > 0 && (
           <div className="tx-row" style={{ gap: 8 }}>
             <span className="tx-mark">
@@ -90,6 +134,12 @@ export function Incidents(props: {
           className="tx-inline-form tx-glass"
           aria-label="Crear incidente"
           noValidate
+          onInput={(e) => {
+            const f = e.currentTarget.elements
+            const v = (n: string) => (f.namedItem(n) as HTMLInputElement | null)?.value ?? ''
+            setDraft(`${v('title')} ${v('description')}`)
+            setDeflected('')
+          }}
           onSubmit={async (e) => {
             e.preventDefault()
             const form = e.currentTarget
@@ -107,7 +157,7 @@ export function Incidents(props: {
               urgency,
               fields: custom,
               assigneeId: Number(assigneeId ?? 0),
-              problemId: notice && linkIt ? match.id : 0,
+              problemId: linkTo || (notice && linkIt ? match.id : 0),
               relatedIncidentId: related,
             }
             // Mientras se guarda, el botón queda deshabilitado: un doble clic no duplica el ticket.
@@ -117,6 +167,7 @@ export function Incidents(props: {
             if (ok) {
               // El incidente ya existe: los archivos se suben a continuación. Si alguno falla, el incidente igual quedó registrado.
               const id = Math.max(...ok.incidents.map((x) => x.id))
+              if (linkTo && applyNow) await run(api.applyWorkaround(id, linkTo))
               const failed: string[] = []
               for (const f of files) {
                 await run(api.addAttachment(id, f), { onError: (m) => failed.push(`${f.name}: ${m}`) })
@@ -131,6 +182,10 @@ export function Incidents(props: {
               setImpact('media')
               setUrgency('media')
               setLinkIt(true)
+              setDraft('')
+              setLinkTo(0)
+              setApplyNow(false)
+              if (canResolve) setComposing(false)
             }
           }}
         >
@@ -293,6 +348,44 @@ export function Incidents(props: {
           </div>
         </form>
 
+        {deflected && (
+          <div className="tx-notice tx-glass-strong" role="status">
+            <div className="tx-notice-ic">
+              <Ic n="check" size="lg" />
+            </div>
+            <div>
+              <span className="tx-strong">Listo, no hizo falta el ticket.</span>
+              <p className="tx-muted" style={{ fontSize: 13 }}>
+                Le avisamos al equipo que el workaround de «{deflected}» te sirvió. Si vuelve a pasar, registralo y lo seguimos.
+              </p>
+            </div>
+            <button className="tx-btn ghost icon sm" aria-label="Cerrar aviso" onClick={() => setDeflected('')}>
+              <Ic n="x" />
+            </button>
+          </div>
+        )}
+        <KnownErrorHints
+          hits={hits}
+          team={canResolve}
+          linkTo={linkTo}
+          onLink={(id) => {
+            setLinkTo(id)
+            if (!id) setApplyNow(false)
+          }}
+          applyNow={applyNow}
+          onApplyNow={setApplyNow}
+          goProblem={goProblem}
+          onDeflected={async (problemId) => {
+            const ok = await run(api.deflect(problemId))
+            if (ok) {
+              setDeflected(hits.find((h) => h.problemId === problemId)?.title ?? '')
+              setDraft('')
+              setFormKey(formKey + 1)
+              setService('')
+            }
+            return !!ok
+          }}
+        />
         {notice && (
           <div className="tx-notice tx-glass-strong" role="status">
             <div className="tx-notice-ic">
@@ -332,8 +425,22 @@ export function Incidents(props: {
           <h2 className="tx-h3">{canResolve ? 'Incidentes' : 'Mis incidentes'}</h2>
           <Filters value={filter} onChange={setFilter} options={options} />
         </div>
-        {lists[filter].length === 0 ? (
-          <div className="tx-inline-empty">No hay incidentes en este filtro.</div>
+        <div className="inc-tools">
+          <label className="inc-search">
+            <Ic n="search" />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por #, título, servicio o persona" aria-label="Buscar incidentes" />
+          </label>
+          <label className="inc-sort">
+            <span className="tx-caption">Ordenar</span>
+            <select className="tx-input" value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Ordenar incidentes">
+              <option value="urgentes">Lo más urgente primero</option>
+              <option value="recientes">Más recientes</option>
+              <option value="antiguos">Más antiguos</option>
+            </select>
+          </label>
+        </div>
+        {rows.length === 0 ? (
+          <div className="tx-inline-empty">{needle ? `Ningún incidente coincide con «${q.trim()}».` : 'No hay incidentes en este filtro.'}</div>
         ) : (
           <div className="tx-table-wrap tx-solid">
             <table className="tx-table">
@@ -349,7 +456,7 @@ export function Incidents(props: {
                 </tr>
               </thead>
               <tbody>
-                {[...lists[filter]].reverse().map((i) => (
+                {rows.map((i) => (
                   <tr key={i.id}>
                     <td className="w-id" data-label="ID">
                       <IncidentId id={i.id} go={open} />

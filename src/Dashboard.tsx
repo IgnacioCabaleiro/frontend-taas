@@ -42,6 +42,10 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
   const mtfr = avgHours(responded.map((i) => (+new Date(i.firstResponseAt!) - +new Date(i.createdAt)) / 36e5))
   const investigated = inc.filter((i) => i.problemId).length
   const reopened = inc.filter((i) => i.reopenCount > 0).length
+  // Satisfacción (CSAT): qué parte de las valoraciones son 4 o 5.
+  const rated = inc.filter((i) => i.rating > 0)
+  const happy = rated.filter((i) => i.rating >= 4).length
+  const avgRating = rated.length ? (rated.reduce((n, i) => n + i.rating, 0) / rated.length).toFixed(1) : null
 
   // Hasta ocho indicadores en dos filas: volumen y tiempos. Los de SLA y de causa investigada solo existen
   // si la cuenta tiene esos módulos.
@@ -49,7 +53,7 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
     [
       { on: true, label: 'Incidentes', dot: 'var(--viz-1)', val: String(inc.length), foot: `${inc.length - resolved.length} siguen abiertos` },
       { on: true, label: 'Resueltos', dot: 'var(--status-resuelto-dot)', val: String(resolved.length), foot: `${show(pct(resolved.length, inc.length))} de los del período` },
-      { on: true, label: 'Sin asignar', dot: 'var(--prio-alta-dot)', val: String(inc.filter((i) => !i.resolvedAt && !i.assigneeId).length), foot: 'abiertos que nadie tomó' },
+      { on: true, label: 'Satisfacción', dot: 'var(--status-resuelto-dot)', val: show(pct(happy, rated.length)), foot: avgRating ? `${avgRating} de 5 · ${count(rated.length, 'valoración', 'valoraciones')}` : 'sin valoraciones todavía' },
       { on: true, label: 'Reabiertos', dot: 'var(--status-conocido-dot)', val: String(reopened), foot: `${show(pct(reopened, inc.length))} de los del período` },
     ],
     [
@@ -93,6 +97,33 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
     return { p, ok: list.filter((i) => !isResponseLate(i)).length, total: list.length }
   })
 
+  // El efecto sandía: servicios que cumplen el SLA (verde por fuera) con la gente disconforme (rojo por dentro).
+  const melon = state.config.services
+    .map((service) => {
+      const list = inc.filter((i) => i.service === service)
+      const m = judged(list)
+      const r = list.filter((i) => i.rating > 0)
+      const slaPct = pct(m.filter((i) => !isLate(i)).length, m.length)
+      const csat = pct(r.filter((i) => i.rating >= 4).length, r.length)
+      return { service, slaPct, csat, ratings: r.length, watermelon: sla && slaPct !== null && csat !== null && slaPct >= 80 && csat < 60 && r.length >= 3 }
+    })
+    .filter((x) => x.ratings > 0)
+    .sort((a, b) => Number(b.watermelon) - Number(a.watermelon) || (a.csat ?? 100) - (b.csat ?? 100))
+
+  // Mapa de calor: incidentes por servicio y por día en las últimas dos semanas (o en el período, si es más corto).
+  const heatDays = Math.min(days, 14)
+  const heatCols = Array.from({ length: heatDays }, (_, d) => midnight(heatDays - 1 - d))
+  const heat = state.config.services
+    .map((service) => ({
+      service,
+      cells: heatCols.map((from, d) => {
+        const to = d + 1 < heatCols.length ? +heatCols[d + 1] : Infinity
+        return state.incidents.filter((i) => i.service === service && +new Date(i.createdAt) >= +from && +new Date(i.createdAt) < to).length
+      }),
+    }))
+    .filter((r) => r.cells.some(Boolean))
+  const heatMax = Math.max(1, ...heat.flatMap((r) => r.cells))
+
   const top = state.problems
     .map((p) => {
       const list = state.incidents.filter((i) => i.problemId === p.id)
@@ -127,6 +158,95 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
           ))}
         </section>
       ))}
+
+      {melon.length > 0 && (
+        <section className="tx-panel tx-solid" aria-labelledby="melon-h">
+          <div className="tx-panel-head">
+            <div>
+              <h2 className="tx-h3" id="melon-h">
+                SLA y satisfacción por servicio
+              </h2>
+              <p className="tx-caption">
+                Un servicio puede cumplir los plazos y aun así dejar a la gente disconforme: verde por fuera, rojo por dentro.
+              </p>
+            </div>
+            {melon.some((m) => m.watermelon) && <span className="tx-badge conocido">{count(melon.filter((m) => m.watermelon).length, 'servicio a mirar', 'servicios a mirar')}</span>}
+          </div>
+          <table className="tx-table">
+            <thead>
+              <tr>
+                <th>Servicio</th>
+                {sla && <th className="num">SLA cumplido</th>}
+                <th className="num">Conformes</th>
+                <th className="num">Valoraciones</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {melon.map((m) => (
+                <tr key={m.service}>
+                  <td className="t-title">{m.service}</td>
+                  {sla && (
+                    <td className="num" data-label="SLA cumplido">
+                      {show(m.slaPct)}
+                    </td>
+                  )}
+                  <td className="num" data-label="Conformes" style={m.csat !== null && m.csat < 60 ? { color: 'var(--danger-fg)', fontWeight: 600 } : undefined}>
+                    {show(m.csat)}
+                  </td>
+                  <td className="num" data-label="Valoraciones">
+                    {m.ratings}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    {m.watermelon && (
+                      <span className="tx-badge conocido" title="Cumple el SLA pero la mayoría no quedó conforme">
+                        Cumple, pero no conforma
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {heat.length > 0 && (
+        <section className="tx-panel tx-solid" aria-labelledby="heat-h">
+          <div>
+            <h2 className="tx-h3" id="heat-h">
+              Dónde y cuándo se rompe
+            </h2>
+            <p className="tx-caption">Incidentes por servicio y por día. Las rachas de un mismo servicio suelen ser un problema esperando a que alguien lo abra.</p>
+          </div>
+          <div className="heat" style={{ gridTemplateColumns: `minmax(120px, max-content) repeat(${heatDays}, minmax(0, 1fr))` }} role="table">
+            <span />
+            {heatCols.map((d) => (
+              <span key={+d} className="heat-day" aria-hidden="true">
+                {d.getDate()}
+              </span>
+            ))}
+            {heat.map((r) => (
+              <div key={r.service} style={{ display: 'contents' }} role="row">
+                <span className="heat-svc" role="rowheader">
+                  {r.service}
+                </span>
+                {r.cells.map((n, d) => (
+                  <span
+                    key={d}
+                    role="cell"
+                    className="heat-cell"
+                    title={`${r.service} · ${heatCols[d].toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}: ${count(n, 'incidente')}`}
+                    style={{ opacity: n ? 0.25 + (0.75 * n) / heatMax : 1, background: n ? 'var(--brand)' : 'var(--surface-sunken)' }}
+                  >
+                    {n || ''}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="viz-grid">
         <section className="viz-card tx-solid">

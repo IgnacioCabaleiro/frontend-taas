@@ -614,6 +614,11 @@ function People({ state, run }: { state: State; run: Run }) {
     const r = roles.find((x) => x.id === roleId)!
     run(api.saveRole(r.id, { name: r.name, perms: on ? [...r.perms, perm] : r.perms.filter((p) => p !== perm) }))
   }
+  // Borrar pide confirmación y cuenta qué pasa con lo que esa persona o ese rol tenía.
+  const [confirm, setConfirm] = useState<{ kind: 'user' | 'role'; id: number } | null>(null)
+  const [confirmError, setConfirmError] = useState('')
+  const target = confirm?.kind === 'user' ? users.find((u) => u.id === confirm.id) : roles.find((r) => r.id === confirm?.id)
+  const assigned = confirm?.kind === 'user' ? state.incidents.filter((i) => i.assigneeId === confirm.id && !i.resolvedAt).length : 0
 
   return (
     <>
@@ -656,7 +661,10 @@ function People({ state, run }: { state: State; run: Run }) {
                 className="tx-btn ghost icon sm"
                 aria-label={`Eliminar a ${u.name}`}
                 disabled={u.id === state.ownerId || u.id === state.me}
-                onClick={() => run(api.deleteUser(u.id))}
+                onClick={() => {
+                  setConfirmError('')
+                  setConfirm({ kind: 'user', id: u.id })
+                }}
               >
                 <Ic n="trash" />
               </button>
@@ -747,7 +755,10 @@ function People({ state, run }: { state: State; run: Run }) {
                       className="tx-btn ghost icon sm"
                       aria-label={`Eliminar el rol ${r.name}`}
                       disabled={r.locked}
-                      onClick={() => run(api.deleteRole(r.id))}
+                      onClick={() => {
+                        setConfirmError('')
+                        setConfirm({ kind: 'role', id: r.id })
+                      }}
                     >
                       <Ic n="trash" />
                     </button>
@@ -773,6 +784,39 @@ function People({ state, run }: { state: State; run: Run }) {
           </button>
         </form>
       </section>
+      {confirm && target && (
+        <Dialog
+          title={confirm.kind === 'user' ? `¿Eliminar a ${target.name}?` : `¿Eliminar el rol ${target.name}?`}
+          onClose={() => setConfirm(null)}
+          footer={
+            <>
+              <button type="button" className="tx-btn ghost" onClick={() => setConfirm(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="tx-btn primary"
+                onClick={async () => {
+                  const s = await run(confirm.kind === 'user' ? api.deleteUser(confirm.id) : api.deleteRole(confirm.id), { onError: setConfirmError })
+                  if (s) setConfirm(null)
+                }}
+              >
+                <Ic n="trash" />
+                Eliminar
+              </button>
+            </>
+          }
+        >
+          <p>
+            {confirm.kind === 'user'
+              ? assigned
+                ? `Pierde el acceso en el momento. ${count(assigned, 'incidente abierto queda', 'incidentes abiertos quedan')} sin asignar.`
+                : 'Pierde el acceso en el momento. Sus tickets y su historial se conservan.'
+              : 'Los permisos de este rol dejan de existir. Si alguien lo tiene asignado, primero cambiale el rol.'}
+          </p>
+          {confirmError && <FieldError id="confirm-e">{confirmError}</FieldError>}
+        </Dialog>
+      )}
     </>
   )
 }

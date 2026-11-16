@@ -5,6 +5,8 @@
 import { useState } from 'react'
 import { api, type Incident, type ResolutionCode, type State } from './api'
 import { AttachmentsPanel } from './Attachments'
+import { RelatedPanel } from './Knowledge'
+import { RatingBlock } from './Rating'
 import {
   A,
   CLOSING_CODES,
@@ -226,6 +228,7 @@ export function IncidentDetail(props: {
             {st === 'resuelto' && (
               <>
                 {resolutionBlock}
+                <RatingBlock i={i} state={state} run={run} />
                 <div className="tx-callout">
                   <div className="tx-row" style={{ gap: 10 }}>
                     <Ic n="clock" />
@@ -266,6 +269,7 @@ export function IncidentDetail(props: {
             {st === 'cerrado' && (
               <>
                 {resolutionBlock}
+                <RatingBlock i={i} state={state} run={run} />
                 <div className="tx-callout">
                   <div className="tx-row" style={{ gap: 10 }}>
                     <Ic n="lock" />
@@ -326,6 +330,17 @@ export function IncidentDetail(props: {
         </div>
 
         <div className="tx-side-panel">
+          {state.incidents.length > 1 && (canResolve || can(state, 'problemas')) && (
+            <RelatedPanel
+              incidentId={i.id}
+              refresh={`${i.history.length}-${state.problems.length}`}
+              open={st === 'abierto'}
+              state={state}
+              run={run}
+              goProblem={props.goProblem}
+              goIncident={props.goIncident}
+            />
+          )}
           <section className="tx-side-card tx-glass">
             <h3 className="tx-h3">Gestión</h3>
             <dl className="inc-facts">
