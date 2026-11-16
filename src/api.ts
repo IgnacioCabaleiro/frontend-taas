@@ -109,7 +109,14 @@ export type Problem = {
   solution: string
   createdAt: string
   history: { at: string; kind: '' | 'analisis' | 'conocido' | 'resuelto' | 'comentario'; text: string; userId: number }[]
+  workaroundShared: boolean // quienes reportan lo ven al escribir un incidente parecido
+  workaroundUses: { incidentId: number; at: string; userId: number; failed: boolean }[]
+  deflections: number // tickets que no se abrieron porque alcanzó el workaround
 }
+
+// Sugerencias por similitud de texto (ver Knowledge en el backend).
+export type ProblemHit = { problemId: number; title: string; service: string; status: Status; workaround: string; score: number; shared: string[] }
+export type IncidentHit = { incidentId: number; title: string; status: string; resolved: boolean; problemId: number; score: number; shared: string[] }
 
 // La cuenta del cliente, tal como la ve el usuario logueado (el backend ya recorta según sus permisos).
 // Una foto de la configuración. Volver a una versión crea otra nueva: el historial solo crece.
@@ -264,4 +271,11 @@ export const api = {
   advance: (id: number, data: Record<string, string>) => t(`/problems/${id}/advance`, data),
   setOwner: (id: number, ownerId: number) => t(`/problems/${id}/owner`, { ownerId }),
   commentProblem: (id: number, text: string) => t(`/problems/${id}/comments`, { text }),
+
+  matchKnowledge: (text: string, service: string) =>
+    request<ProblemHit[]>(`/knowledge/match?${new URLSearchParams({ text, service })}`),
+  related: (id: number) => request<{ problems: ProblemHit[]; incidents: IncidentHit[] }>(`/incidents/${id}/related`),
+  applyWorkaround: (id: number, problemId: number) => t(`/incidents/${id}/workaround`, { problemId }),
+  updateWorkaround: (id: number, text: string, shared: boolean) => t(`/problems/${id}/workaround`, { text, shared }, 'PUT'),
+  deflect: (id: number) => t(`/problems/${id}/deflect`, {}),
 }

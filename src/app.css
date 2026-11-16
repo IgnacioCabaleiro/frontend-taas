@@ -270,3 +270,16 @@ fieldset.cfg { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; fl
   .onb-picks, .onb-picks.two { grid-template-columns: 1fr; }
   .onb-step { padding: 20px; }
 }
+
+/* ---------- Errores conocidos y workarounds ---------- */
+.kn-hits .tx-workaround, .kn-hit .tx-callout { margin: 0; }
+.kn-hit { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+.kn-hit:first-of-type { border-top: 0; padding-top: 0; }
+.kn-match { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-subtle); font-weight: 500; white-space: nowrap; }
+.kn-bar { width: 44px; height: 4px; border-radius: 4px; background: var(--hairline-strong); overflow: hidden; }
+.kn-bar i { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
+.kn-inc { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.kn-inc .t { flex: 1; min-width: 120px; }
+.kn-stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; font-size: 13px; color: var(--ink-muted); }
+.kn-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.kn-stats .kn-low b { color: var(--danger-fg); }

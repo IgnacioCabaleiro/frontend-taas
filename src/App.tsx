@@ -125,7 +125,7 @@ export default function App() {
     ? {
         problemas: state.problems.filter((p) => p.status !== 'resuelto').length,
         incidentes: state.incidents.filter((i) => !i.resolvedAt).length,
-        kedb: state.problems.length,
+        kedb: state.problems.filter((p) => p.status === 'error_conocido').length,
       }
     : {}
   const T = TABS[current]

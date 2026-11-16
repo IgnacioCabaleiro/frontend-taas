@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Problem, type State } from './api'
+import { WorkaroundPanel } from './Knowledge'
 import { A, Dialog, FieldError, Filters, Ic, IncStage, IncidentId, Prio, RootCause, STATUS, STEPS, Solution, StatusBadge, Workaround, ago, can, count, fields, fmt, userName, usersWith, type Run } from './ui'
 
 export function Board({ state, run, open }: { state: State; run: Run; open: (id: number) => void }) {
@@ -328,7 +329,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
           <form className="tx-panel tx-solid" noValidate onSubmit={advance('solution')}>
             {head}
             <RootCause text={p.rootCause} />
-            {p.workaround && <Workaround text={p.workaround} />}
+            <WorkaroundPanel key={p.id} p={p} state={state} run={run} openIds={incidents.filter((i) => !i.resolvedAt).map((i) => i.id)} />
             <div className="tx-field">
               <label className="tx-label" htmlFor="sol">
                 Solución definitiva <span className="req">*</span>
@@ -396,7 +397,7 @@ export function ProblemDetail({ p, state, run, back, goIncident }: { p: Problem;
                       ) : p.workaround && canResolve ? (
                         <button
                           className="tx-btn secondary sm"
-                          onClick={() => run(api.updateIncident(i.id, { status: resolvedState, resolutionCode: 'workaround', resolutionNote: p.workaround }))}
+                          onClick={() => run(api.applyWorkaround(i.id, p.id))}
                         >
                           <Ic n="bulb" />
                           Resolver con workaround
