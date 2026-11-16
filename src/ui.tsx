@@ -68,6 +68,56 @@ export const STATUS: Record<Status, { label: string; cls: string }> = {
 export const StatusBadge = ({ s }: { s: Status }) => <span className={`tx-badge ${STATUS[s].cls}`}>{STATUS[s].label}</span>
 export const Prio = ({ p }: { p: Priority }) => <span className={`tx-prio ${p}`}>{p[0].toUpperCase() + p.slice(1)}</span>
 
+// Matriz de prioridad (ITIL 4), la misma que PriorityFor en el backend: la prioridad sale del impacto y la urgencia.
+// Sumando los niveles (alta = 0, media = 1, baja = 2): 0 o 1 es alta, 2 es media, 3 o 4 es baja.
+export const LEVELS: Priority[] = ['alta', 'media', 'baja']
+export const priorityFor = (impact: Priority, urgency: Priority): Priority => {
+  const s = LEVELS.indexOf(impact) + LEVELS.indexOf(urgency)
+  return s <= 1 ? 'alta' : s === 2 ? 'media' : 'baja'
+}
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
+
+// Preguntas en lenguaje llano: quien reporta no tiene que saber qué es "impacto" en ITIL.
+const MATRIX = {
+  impact: {
+    label: 'Impacto',
+    question: '¿A cuántos afecta?',
+    help: { alta: 'A mucha gente o a toda un área', media: 'A un grupo o a un equipo', baja: 'A una sola persona' },
+  },
+  urgency: {
+    label: 'Urgencia',
+    question: '¿Cuánto puede esperar?',
+    help: { alta: 'Nada: frena el trabajo', media: 'Unas horas, se puede seguir con algo', baja: 'Puede esperar sin problema' },
+  },
+} as const
+
+export function LevelPicker({ kind, value, onChange }: { kind: keyof typeof MATRIX; value: Priority; onChange: (p: Priority) => void }) {
+  const m = MATRIX[kind]
+  return (
+    <div className="tx-field">
+      <span className="tx-label">
+        {m.label} <span className="opt">{m.question}</span>
+      </span>
+      <div className="tx-seg" role="group" aria-label={`${m.label}: ${m.question}`}>
+        {LEVELS.map((p) => (
+          <button key={p} type="button" aria-pressed={p === value} onClick={() => onChange(p)}>
+            {cap(p)}
+          </button>
+        ))}
+      </div>
+      <span className="tx-help">{m.help[value]}</span>
+    </div>
+  )
+}
+
+// Impacto y urgencia con los que se registró un incidente (vacío en los de prioridad elegida a mano).
+export const MatrixCaption = ({ i }: { i: Incident }) =>
+  i.impact && i.urgency ? (
+    <span className="tx-caption" title="La prioridad sale del impacto y la urgencia">
+      Impacto {i.impact} · urgencia {i.urgency}
+    </span>
+  ) : null
+
 export const ProblemId = ({ id, go }: { id: number; go?: (id: number) => void }) =>
   go ? (
     <A className="tx-id" onClick={() => go(id)}>

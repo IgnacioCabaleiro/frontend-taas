@@ -12,6 +12,7 @@ import {
   Ic,
   IncBadge,
   IncidentId,
+  MatrixCaption,
   PauseBadge,
   Prio,
   ProblemId,
@@ -138,6 +139,7 @@ export function IncidentDetail(props: {
             {i.service}
           </span>
           <Prio p={i.priority} />
+          <MatrixCaption i={i} />
           <StageBadge i={i} />
           {!i.resolvedAt && <IncBadge i={i} />}
           {paused && <PauseBadge />}

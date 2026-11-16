@@ -3,7 +3,7 @@
 // mostrándole a la derecha cómo va quedando.
 import { useEffect, useState, type ReactNode } from 'react'
 import { api, type Priority, type Setup, type State, type Template } from './api'
-import { FieldError, Ic, Prio, count, fields, hoursToDraft, hoursToSent, initials, num, type Run } from './ui'
+import { FieldError, Ic, LevelPicker, Prio, count, fields, hoursToDraft, hoursToSent, initials, num, priorityFor, type Run } from './ui'
 import { ListEditor } from './Settings'
 
 const PRIOS: Priority[] = ['alta', 'media', 'baja']
@@ -53,7 +53,7 @@ const QUESTIONS: (Question & { key: keyof Answers })[] = [
     q: '¿Necesitás pedir algún dato puntual en cada ticket?',
     no: 'Con una descripción alcanza',
     yes: 'Sí, hay datos que siempre pregunto',
-    then: ['El ticket pide solo título, servicio y prioridad.', 'Sumamos campos propios de tu rubro. Después podés cambiarlos.'],
+    then: ['El ticket pide solo título, servicio, impacto y urgencia.', 'Sumamos campos propios de tu rubro. Después podés cambiarlos.'],
   },
 ]
 // Del paso "Plazos", solo si tiene plazos que cumplir.
@@ -177,7 +177,10 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
   const [waits, setWaits] = useState<boolean | null>(null)
   const [responseHours, setResponseHours] = useState<Hours>({ alta: '', media: '', baja: '' })
   const [autoCloseDays, setAutoCloseDays] = useState('')
-  const [prio, setPrio] = useState<Priority>('media')
+  // Primer ticket: la prioridad sale de la matriz impacto × urgencia.
+  const [impact, setImpact] = useState<Priority>('media')
+  const [urgency, setUrgency] = useState<Priority>('media')
+  const prio = priorityFor(impact, urgency)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   // El borrador se lee una vez, al entrar, y se empieza a guardar recién después de intentar recuperarlo
@@ -569,7 +572,7 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                   e.preventDefault()
                   const { title, service, ...custom } = fields(e.currentTarget)
                   if (!title.trim()) return setError('Contanos qué está pasando, aunque sea en una línea.')
-                  if (await call(api.createIncident({ title, service, priority: prio, fields: custom }))) finish(true)
+                  if (await call(api.createIncident({ title, service, impact, urgency, fields: custom }))) finish(true)
                 }}
               >
                 <div>
@@ -593,25 +596,31 @@ export function Onboarding(props: { state: State; run: Run; onDone: (createdTick
                       ))}
                     </select>
                   </div>
-                  <div className="tx-field">
+                  {/* Como el resto de los cambios del paso, elegir un nivel borra el error que estuviera a la vista. */}
+                  <LevelPicker
+                    kind="impact"
+                    value={impact}
+                    onChange={(p) => {
+                      setImpact(p)
+                      edited()
+                    }}
+                  />
+                  <LevelPicker
+                    kind="urgency"
+                    value={urgency}
+                    onChange={(p) => {
+                      setUrgency(p)
+                      edited()
+                    }}
+                  />
+                  <div className="tx-field" aria-live="polite">
                     <span className="tx-label">Prioridad</span>
-                    <div className="tx-seg" role="group" aria-label="Prioridad">
-                      {PRIOS.map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          aria-pressed={p === prio}
-                          onClick={() => {
-                            setPrio(p)
-                            edited()
-                          }}
-                        >
-                          <span className={`tx-prio ${p}`} style={{ padding: 0, background: 'none', height: 'auto' }} />
-                          {p[0].toUpperCase() + p.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                    {state.config.modules.sla && <span className="tx-help">Vence en {state.config.slaHours[prio]} h</span>}
+                    <span style={{ minHeight: 38, display: 'flex', alignItems: 'center' }}>
+                      <Prio p={prio} />
+                    </span>
+                    <span className="tx-help">
+                      Sale del impacto y la urgencia{state.config.modules.sla && ` · vence en ${state.config.slaHours[prio]} h`}
+                    </span>
                   </div>
                   {state.config.fields.map((f) => (
                     <div key={f.key} className="tx-field">
