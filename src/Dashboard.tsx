@@ -110,6 +110,20 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
     .filter((x) => x.ratings > 0)
     .sort((a, b) => Number(b.watermelon) - Number(a.watermelon) || (a.csat ?? 100) - (b.csat ?? 100))
 
+  // Mapa de calor: incidentes por servicio y por día en las últimas dos semanas (o en el período, si es más corto).
+  const heatDays = Math.min(days, 14)
+  const heatCols = Array.from({ length: heatDays }, (_, d) => midnight(heatDays - 1 - d))
+  const heat = state.config.services
+    .map((service) => ({
+      service,
+      cells: heatCols.map((from, d) => {
+        const to = d + 1 < heatCols.length ? +heatCols[d + 1] : Infinity
+        return state.incidents.filter((i) => i.service === service && +new Date(i.createdAt) >= +from && +new Date(i.createdAt) < to).length
+      }),
+    }))
+    .filter((r) => r.cells.some(Boolean))
+  const heatMax = Math.max(1, ...heat.flatMap((r) => r.cells))
+
   const top = state.problems
     .map((p) => {
       const list = state.incidents.filter((i) => i.problemId === p.id)
@@ -194,6 +208,43 @@ export function Dashboard({ state, openProblem }: { state: State; openProblem?: 
               ))}
             </tbody>
           </table>
+        </section>
+      )}
+
+      {heat.length > 0 && (
+        <section className="tx-panel tx-solid" aria-labelledby="heat-h">
+          <div>
+            <h2 className="tx-h3" id="heat-h">
+              Dónde y cuándo se rompe
+            </h2>
+            <p className="tx-caption">Incidentes por servicio y por día. Las rachas de un mismo servicio suelen ser un problema esperando a que alguien lo abra.</p>
+          </div>
+          <div className="heat" style={{ gridTemplateColumns: `minmax(120px, max-content) repeat(${heatDays}, minmax(0, 1fr))` }} role="table">
+            <span />
+            {heatCols.map((d) => (
+              <span key={+d} className="heat-day" aria-hidden="true">
+                {d.getDate()}
+              </span>
+            ))}
+            {heat.map((r) => (
+              <div key={r.service} style={{ display: 'contents' }} role="row">
+                <span className="heat-svc" role="rowheader">
+                  {r.service}
+                </span>
+                {r.cells.map((n, d) => (
+                  <span
+                    key={d}
+                    role="cell"
+                    className="heat-cell"
+                    title={`${r.service} · ${heatCols[d].toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}: ${count(n, 'incidente')}`}
+                    style={{ opacity: n ? 0.25 + (0.75 * n) / heatMax : 1, background: n ? 'var(--brand)' : 'var(--surface-sunken)' }}
+                  >
+                    {n || ''}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
