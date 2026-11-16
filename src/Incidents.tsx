@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { api, type Priority, type State } from './api'
 import { Dropzone, FileChip, fileProblem } from './Attachments'
-import { A, FieldError, Filters, Ic, IncStage, IncidentId, Prio, ProblemId, Sla, StatusBadge, can, count, fields, isLate, userName, usersWith, type Run } from './ui'
-
-const PRIOS: Priority[] = ['alta', 'media', 'baja']
+import { A, FieldError, Filters, Ic, IncStage, IncidentId, LevelPicker, Prio, ProblemId, priorityFor, Sla, StatusBadge, can, count, fields, isLate, userName, usersWith, type Run } from './ui'
 
 export function Incidents(props: {
   state: State
@@ -23,7 +21,11 @@ export function Incidents(props: {
   const [prefill, setPrefill] = useState(() => incidents.find((i) => i.id === related))
   const [formKey, setFormKey] = useState(0)
   const [service, setService] = useState(prefill?.service ?? '')
-  const [prio, setPrio] = useState<Priority>(prefill?.priority ?? 'media')
+  // La prioridad sale de la matriz impacto × urgencia. Si el cerrado que continúa se registró con la prioridad
+  // elegida a mano, se precarga como impacto con urgencia media: la matriz da la misma prioridad.
+  const [impact, setImpact] = useState<Priority>(prefill?.impact || prefill?.priority || 'media')
+  const [urgency, setUrgency] = useState<Priority>(prefill?.urgency || 'media')
+  const prio = priorityFor(impact, urgency)
   const [linkIt, setLinkIt] = useState(true)
   const [dismissed, setDismissed] = useState('')
   const [errs, setErrs] = useState<Record<string, boolean>>({})
@@ -101,7 +103,8 @@ export function Incidents(props: {
               title,
               description,
               service,
-              priority: prio,
+              impact,
+              urgency,
               fields: custom,
               assigneeId: Number(assigneeId ?? 0),
               problemId: notice && linkIt ? match.id : 0,
@@ -125,7 +128,8 @@ export function Incidents(props: {
               setPrefill(undefined)
               setRelated(0)
               setService('')
-              setPrio('media')
+              setImpact('media')
+              setUrgency('media')
               setLinkIt(true)
             }
           }}
@@ -166,16 +170,12 @@ export function Incidents(props: {
             {errs.service && <FieldError id="s-e">Elegí el servicio afectado.</FieldError>}
           </div>
 
-          <div className="tx-field">
+          {/* La prioridad no se elige: se calcula con el impacto y la urgencia de la fila de abajo. */}
+          <div className="tx-field" aria-live="polite">
             <span className="tx-label">Prioridad</span>
-            <div className="tx-seg" role="group" aria-label="Prioridad">
-              {PRIOS.map((p) => (
-                <button key={p} type="button" aria-pressed={p === prio} onClick={() => setPrio(p)}>
-                  <span className={`tx-prio ${p}`} style={{ padding: 0, background: 'none', height: 'auto' }} />
-                  {p[0].toUpperCase() + p.slice(1)}
-                </button>
-              ))}
-            </div>
+            <span style={{ minHeight: 38, display: 'flex', alignItems: 'center' }}>
+              <Prio p={prio} />
+            </span>
             {sla && (
               <span className="tx-help">
                 SLA: primera respuesta en {config.responseHours[prio]} h, resolución en {config.slaHours[prio]} h
@@ -187,6 +187,11 @@ export function Incidents(props: {
             <Ic n="plus" />
             Crear
           </button>
+
+          <div className="tx-cols" style={{ gridColumn: '1 / -1' }}>
+            <LevelPicker kind="impact" value={impact} onChange={setImpact} />
+            <LevelPicker kind="urgency" value={urgency} onChange={setUrgency} />
+          </div>
 
           {/* Campos propios de la empresa (Configuración → Campos del incidente) */}
           <div className="tx-cols" style={{ gridColumn: '1 / -1' }}>
